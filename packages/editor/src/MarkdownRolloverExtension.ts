@@ -234,36 +234,34 @@ function inferSideFromCursorMotion(
 	const oldPos = oldState.selection.from;
 	const newPos = newState.selection.from;
 	if (oldPos === newPos) return null;
-
-	const boundaryPos = newPos;
-	if (boundaryPos !== newState.selection.from) return null;
-
-	const rangeAtOldPos = findMarkRangeAtPos(
-		oldState,
-		oldPos,
+	const rangeAtBoundaryPos = findMarkRangeAtPos(
+		newState,
+		newPos,
 		boundaryMatch.markType,
 	);
-	if (!rangeAtOldPos) return null;
+	if (!rangeAtBoundaryPos) return null;
 
 	const movedLeft = oldPos > newPos;
 	const movedRight = oldPos < newPos;
 
 	if (
 		boundaryMatch.boundary === 'start' &&
-		movedLeft &&
-		newPos === rangeAtOldPos.from &&
-		oldPos > rangeAtOldPos.from &&
-		oldPos <= rangeAtOldPos.to
+		newPos === rangeAtBoundaryPos.from &&
+		((movedLeft &&
+			oldPos > rangeAtBoundaryPos.from &&
+			oldPos <= rangeAtBoundaryPos.to) ||
+			(movedRight && oldPos <= rangeAtBoundaryPos.from))
 	) {
 		return 'inside';
 	}
 
 	if (
 		boundaryMatch.boundary === 'end' &&
-		movedRight &&
-		newPos === rangeAtOldPos.to &&
-		oldPos < rangeAtOldPos.to &&
-		oldPos >= rangeAtOldPos.from
+		newPos === rangeAtBoundaryPos.to &&
+		((movedRight &&
+			oldPos < rangeAtBoundaryPos.to &&
+			oldPos >= rangeAtBoundaryPos.from) ||
+			(movedLeft && oldPos >= rangeAtBoundaryPos.to))
 	) {
 		return 'inside';
 	}
