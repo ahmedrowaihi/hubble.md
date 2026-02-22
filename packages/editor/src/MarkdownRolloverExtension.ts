@@ -12,9 +12,10 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 type CursorSide = 'inside' | 'outside';
 type BoundaryType = 'start' | 'end';
 type BoundaryMatch = { markType: MarkType; boundary: BoundaryType };
-type RolloverBoundaryState = {
+export type RolloverBoundaryState = {
 	boundaryPos: number;
 	markName: string;
+	boundary: BoundaryType;
 	side: CursorSide;
 } | null;
 
@@ -26,9 +27,13 @@ const DELIMITER_BY_MARK: Record<string, string> = {
 	strike: '~~',
 };
 
-const MarkdownRolloverKey = new PluginKey<RolloverBoundaryState>(
+export const MarkdownRolloverKey = new PluginKey<RolloverBoundaryState>(
 	'markdownRollover',
 );
+
+export function getMarkdownRolloverBoundaryState(state: EditorState) {
+	return MarkdownRolloverKey.getState(state) ?? null;
+}
 
 export const MarkdownRolloverExtension = Extension.create({
 	name: 'markdownRollover',
@@ -72,6 +77,7 @@ export const MarkdownRolloverExtension = Extension.create({
 						tr.setMeta(MarkdownRolloverKey, {
 							boundaryPos: next.boundaryPos,
 							markName: next.markType.name,
+							boundary: next.boundary,
 							side: next.side,
 						} satisfies NonNullable<RolloverBoundaryState>);
 						view.dispatch(tr);
@@ -113,6 +119,7 @@ export const MarkdownRolloverExtension = Extension.create({
 						tr.setMeta(MarkdownRolloverKey, {
 							boundaryPos,
 							markName,
+							boundary,
 							side,
 						} satisfies NonNullable<RolloverBoundaryState>);
 						view.dispatch(tr);
@@ -125,19 +132,6 @@ export const MarkdownRolloverExtension = Extension.create({
 						const delimiter = DELIMITER_BY_MARK[active.markType.name];
 						if (!delimiter) return null;
 
-						const boundaryState = MarkdownRolloverKey.getState(state) ?? null;
-						const startCaretClass = getCaretClassForBoundary(
-							boundaryState,
-							active.markType,
-							active.from,
-							'start',
-						);
-						const endCaretClass = getCaretClassForBoundary(
-							boundaryState,
-							active.markType,
-							active.to,
-							'end',
-						);
 
 						const startWidget = Decoration.widget(
 							active.from,
@@ -147,7 +141,6 @@ export const MarkdownRolloverExtension = Extension.create({
 									markName: active.markType.name,
 									boundary: 'start',
 									pos: active.from,
-									caretClass: startCaretClass,
 								}),
 							{ side: -1 },
 						);
@@ -159,7 +152,6 @@ export const MarkdownRolloverExtension = Extension.create({
 									markName: active.markType.name,
 									boundary: 'end',
 									pos: active.to,
-									caretClass: endCaretClass,
 								}),
 							{ side: 1 },
 						);
@@ -177,16 +169,14 @@ function createDelimiterWidget({
 	markName,
 	boundary,
 	pos,
-	caretClass,
 }: {
 	delimiter: string;
 	markName: string;
 	boundary: BoundaryType;
 	pos: number;
-	caretClass: string | null;
 }) {
 	const span = document.createElement('span');
-	span.className = `pm-md-delimiter pm-md-delimiter-${boundary}${caretClass ? ` ${caretClass}` : ''}`;
+	span.className = `pm-md-delimiter pm-md-delimiter-${boundary}`;
 	span.dataset.mark = markName;
 	span.dataset.boundary = boundary;
 	span.dataset.pos = String(pos);
@@ -195,35 +185,15 @@ function createDelimiterWidget({
 	return span;
 }
 
-function getCaretClassForBoundary(
-	boundaryState: RolloverBoundaryState,
-	markType: MarkType,
-	pos: number,
-	boundary: BoundaryType,
-): string | null {
-	if (
-		!boundaryState ||
-		boundaryState.boundaryPos !== pos ||
-		boundaryState.markName !== markType.name
-	) {
-		return null;
-	}
-
-	if (boundary === 'start') {
-		return boundaryState.side === 'inside'
-			? 'pm-md-caret-right'
-			: 'pm-md-caret-left';
-	}
-
-	return boundaryState.side === 'inside'
-		? 'pm-md-caret-left'
-		: 'pm-md-caret-right';
-}
-
 function getBoundaryTransition(
 	view: EditorView,
 	key: 'ArrowLeft' | 'ArrowRight',
-): { boundaryPos: number; markType: MarkType; side: CursorSide } | null {
+): {
+	boundaryPos: number;
+	markType: MarkType;
+	boundary: BoundaryType;
+	side: CursorSide;
+} | null {
 	const { state } = view;
 	const { selection } = state;
 	if (!selection.empty) return null;
@@ -244,6 +214,7 @@ function getBoundaryTransition(
 	return {
 		boundaryPos: selection.from,
 		markType: boundaryMatch.markType,
+		boundary: boundaryMatch.boundary,
 		side: nextSide,
 	};
 }
@@ -281,7 +252,8 @@ function deriveBoundaryState(
 	if (
 		prev &&
 		prev.boundaryPos === selection.from &&
-		prev.markName === boundaryMatch.markType.name
+		prev.markName === boundaryMatch.markType.name &&
+		prev.boundary === boundaryMatch.boundary
 	) {
 		return prev;
 	}
@@ -289,6 +261,7 @@ function deriveBoundaryState(
 	return {
 		boundaryPos: selection.from,
 		markName: boundaryMatch.markType.name,
+		boundary: boundaryMatch.boundary,
 		side: isMarkActiveForInsertion(state, boundaryMatch.markType)
 			? 'inside'
 			: 'outside',

@@ -42,6 +42,7 @@
 }
 .editorRoot {
   height: 100%;
+  position: relative;
 }
 
 .editorInput {
@@ -54,6 +55,7 @@
   word-wrap: break-word;
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0;
+  caret-color: transparent;
 }
 
 .ProseMirror > * {
@@ -126,22 +128,33 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
 }
-
-.pm-md-caret-left::after,
-.pm-md-caret-right::after {
+.pm-virtual-cursor {
   content: "";
   position: absolute;
-  inset-block-start: -0.05em;
-  inset-block-end: -0.05em;
-  inline-size: 1px;
+  border-radius: 4px;
   background: #111827;
-  opacity: 0.95;
+  pointer-events: none;
+  transform-origin: top;
+  transition:
+    left 130ms ease,
+    top 130ms ease,
+    width 130ms ease,
+    height 130ms ease;
 }
 
-.pm-md-caret-left::after {
-  inset-inline-start: -1px;
+.pm-virtual-cursor.blinking {
+  animation: pm-cursor-blink 1s infinite;
 }
 
-.pm-md-caret-right::after {
-  inset-inline-end: -1px;
+@keyframes pm-cursor-blink {
+  0%,
+  40% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
