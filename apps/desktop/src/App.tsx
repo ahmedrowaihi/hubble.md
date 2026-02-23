@@ -17,6 +17,9 @@ import { loadPath, savePathContent, viewerStore } from "./store";
 import { createAppMenu } from "./appMenu";
 import { VirtualCursor } from "./editor/VirtualCursor";
 import "./App.css";
+const HMR_REV = import.meta.hot
+  ? (import.meta.hot.data.__editorRev = (import.meta.hot.data.__editorRev ?? 0) + 1)
+  : 0;
 
 function App() {
   const state = useStoreValue(viewerStore);
@@ -108,7 +111,11 @@ function App() {
           <p>Open a markdown file to edit. Press ⌘O.</p>
         )}
         {state.status === "ready" && state.currentPath && (
-          <MarkdownEditor key={state.currentPath} path={state.currentPath} initialMarkdown={state.content} />
+          <MarkdownEditor
+            key={`${state.currentPath}:${HMR_REV}`}
+            path={state.currentPath}
+            initialMarkdown={state.content}
+          />
         )}
       </section>
     </main>
