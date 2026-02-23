@@ -482,3 +482,8 @@ function findMarkRangeAtPos(
 
 	return { from, to };
 }
+
+export const __testing = {
+	getNextSideForArrow,
+	inferSideFromCursorMotion,
+};

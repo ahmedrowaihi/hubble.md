@@ -129,7 +129,6 @@
     "Courier New", monospace;
 }
 .pm-virtual-cursor {
-  content: "";
   position: absolute;
   border-radius: 4px;
   background: #111827;
