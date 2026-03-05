@@ -113,12 +113,12 @@ describe("markdown rollover esc-only behavior", () => {
 		expect(getCaretFormattingState(state).canEscapeBoundary).toBe(false);
 	});
 
-	it("treats both link edges as active formatting by default", () => {
+	it("treats only link end edge as active formatting by default", () => {
 		const atStart = getCaretFormattingState(stateAt(LINK_START));
 		const atEnd = getCaretFormattingState(stateAt(LINK_END));
-		expect(atStart.activeMarkNames).toContain("link");
+		expect(atStart.activeMarkNames).not.toContain("link");
 		expect(atEnd.activeMarkNames).toContain("link");
-		expect(atStart.canEscapeBoundary).toBe(true);
+		expect(atStart.canEscapeBoundary).toBe(false);
 		expect(atEnd.canEscapeBoundary).toBe(true);
 	});
 });

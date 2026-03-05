@@ -112,6 +112,7 @@ function canEscapeBoundaryAtCursor(
 
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
 	if (!boundaryMatch) return false;
+	if (boundaryMatch.boundary !== "end") return false;
 	if (
 		isBoundaryEscaped(
 			escapedBoundary,
@@ -159,6 +160,7 @@ function getActiveMarkNamesAtCursor(
 	const boundaryMatch = getBoundaryMatchAtPos(state, state.selection.from);
 	if (
 		boundaryMatch &&
+		boundaryMatch.boundary === "end" &&
 		!isBoundaryEscaped(
 			escapedBoundary,
 			state.selection.from,
