@@ -119,14 +119,15 @@ function machineReducer(
 	}
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────
-
-const GHOST_TRUNCATE = 60;
-
-function truncateGhost(href: string): string {
-	if (href.length <= GHOST_TRUNCATE) return href;
-	return `${href.slice(0, GHOST_TRUNCATE)}…`;
+function getLinkSession(editor: Editor) {
+	const link = getActiveLinkRange(editor.state);
+	return {
+		link,
+		activeKey: link ? `${link.from}:${link.to}` : null,
+	};
 }
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 async function copyLinkToClipboard(href: string) {
 	try {
@@ -292,29 +293,39 @@ export function LinkPopover({
 		}
 		dispatch(event);
 	}, []);
+	const openCreationTitleInput = useCallback(() => {
+		if (!editor || creationCursorPos === null) return;
+		clearGhostText(editor);
+		if (creationHref) {
+			applyLinkMarkAtPos(editor, creationCursorPos, creationHref);
+		}
+		dispatchMachineEvent({ type: "TITLE_INPUT_REQUESTED" });
+		editor.commands.focus(undefined, { scrollIntoView: false });
+	}, [editor, creationCursorPos, creationHref, dispatchMachineEvent]);
 
 	// ── Link detection + positioning for existing links ─────────────
 	useEffect(() => {
 		if (!editor) return;
 		const update = () => {
-			const link = getActiveLinkRange(editor.state);
+			const { link, activeKey } = getLinkSession(editor);
 			setActiveLink(link);
 			if (link) setHrefValue(link.href);
-			const nextActiveKey = link ? `${link.from}:${link.to}` : null;
 			dispatchMachineEvent({
 				type: "LINK_SESSION_CHANGED",
-				activeKey: nextActiveKey,
+				activeKey,
 			});
 
 			const container = containerRef.current;
 			const floatingEl = popoverRef.current;
-			const shouldPosition = link || machineStateRef.current.pendingCreation;
+			const isCreating =
+				machineState.mode === "creating" && creationCursorPos !== null;
+			const shouldPosition = link || machineState.pendingCreation || isCreating;
 			if (!container || !floatingEl || !shouldPosition) return;
 			updateFloatingPosition(
 				editor,
 				container,
 				floatingEl,
-				editor.state.selection.from,
+				isCreating ? creationCursorPos : editor.state.selection.from,
 				setFloatingX,
 				setFloatingY,
 			);
@@ -338,7 +349,14 @@ export function LinkPopover({
 			window.removeEventListener("resize", update);
 			window.removeEventListener("scroll", update, true);
 		};
-	}, [editor, containerRef, dispatchMachineEvent]);
+	}, [
+		editor,
+		containerRef,
+		dispatchMachineEvent,
+		machineState.mode,
+		machineState.pendingCreation,
+		creationCursorPos,
+	]);
 
 	// ── Listen for FOCUS_LINK_POPOVER_EVENT (selection-based flow) ──
 	useEffect(() => {
@@ -385,27 +403,6 @@ export function LinkPopover({
 		});
 	}, [machineState.mode]);
 
-	// ── Position popover during creation mode ───────────────────────
-	useEffect(() => {
-		if (
-			!editor ||
-			machineState.mode !== "creating" ||
-			creationCursorPos === null
-		)
-			return;
-		const container = containerRef.current;
-		const floatingEl = popoverRef.current;
-		if (!container || !floatingEl) return;
-		updateFloatingPosition(
-			editor,
-			container,
-			floatingEl,
-			creationCursorPos,
-			setFloatingX,
-			setFloatingY,
-		);
-	}, [editor, containerRef, machineState.mode, creationCursorPos]);
-
 	// ── Ghost text decoration management ────────────────────────────
 	useEffect(() => {
 		if (!editor) return;
@@ -417,13 +414,48 @@ export function LinkPopover({
 			editor.view.dispatch(
 				editor.state.tr.setMeta(linkCreationGhostKey, {
 					pos: creationCursorPos,
-					text: truncateGhost(creationHref),
+					text: creationHref,
 				}),
 			);
 		} else if (machineState.mode !== "creating") {
 			clearGhostText(editor);
 		}
 	}, [editor, machineState.mode, creationCursorPos, creationHref]);
+
+	// ── Pointer: creating mode ──────────────────────────────────────
+	useEffect(() => {
+		if (!editor || machineState.mode !== "creating") return;
+		const onPointerDown = (event: PointerEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (popoverRef.current?.contains(target)) return;
+
+			requestAnimationFrame(() => {
+				const clickedCreationCursor =
+					creationCursorPos !== null &&
+					editor.view.dom.contains(target) &&
+					editor.state.selection.empty &&
+					editor.state.selection.from === creationCursorPos;
+
+				if (clickedCreationCursor) {
+					openCreationTitleInput();
+					return;
+				}
+
+				clearGhostText(editor);
+				const { link, activeKey } = getLinkSession(editor);
+				setActiveLink(link);
+				if (link) setHrefValue(link.href);
+				// Clicking anywhere else should behave like Escape: exit creation
+				// mode, then recompute visibility from the editor's real selection.
+				dispatch({ type: "ESCAPE_REQUESTED" });
+				dispatch({ type: "LINK_SESSION_CHANGED", activeKey });
+			});
+		};
+
+		window.addEventListener("pointerdown", onPointerDown, true);
+		return () => window.removeEventListener("pointerdown", onPointerDown, true);
+	}, [editor, machineState.mode, creationCursorPos, openCreationTitleInput]);
 
 	// ── Keyboard: creating mode ─────────────────────────────────────
 	useEffect(() => {
@@ -446,12 +478,7 @@ export function LinkPopover({
 			if (isInputFocused && event.key === "Tab") {
 				event.preventDefault();
 				event.stopPropagation();
-				if (creationHref && creationCursorPos !== null) {
-					clearGhostText(editor);
-					applyLinkMarkAtPos(editor, creationCursorPos, creationHref);
-				}
-				dispatchMachineEvent({ type: "TITLE_INPUT_REQUESTED" });
-				editor.commands.focus(undefined, { scrollIntoView: false });
+				openCreationTitleInput();
 				return;
 			}
 
@@ -477,6 +504,7 @@ export function LinkPopover({
 		creationHref,
 		creationCursorPos,
 		dispatchMachineEvent,
+		openCreationTitleInput,
 	]);
 
 	// ── Keyboard: existing link (preview / actions) ─────────────────

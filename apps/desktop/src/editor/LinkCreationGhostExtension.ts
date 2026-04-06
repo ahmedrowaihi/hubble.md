@@ -2,7 +2,11 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-type GhostTextState = { pos: number; text: string } | null;
+type GhostText = { pos: number; text: string };
+type GhostTextState = GhostText | undefined;
+type GhostTextMeta = GhostTextState | null;
+
+const GHOST_TEXT_CLASS = "pm-ghost-text";
 
 export const linkCreationGhostKey = new PluginKey<GhostTextState>(
 	"linkCreationGhost",
@@ -15,11 +19,10 @@ export const LinkCreationGhostExtension = Extension.create({
 			new Plugin<GhostTextState>({
 				key: linkCreationGhostKey,
 				state: {
-					init: () => null,
+					init: () => undefined,
 					apply: (tr, prev) => {
-						const meta = tr.getMeta(linkCreationGhostKey) as
-							| GhostTextState
-							| undefined;
+						const meta = tr.getMeta(linkCreationGhostKey) as GhostTextMeta;
+						if (meta === null) return undefined;
 						if (meta !== undefined) return meta;
 						if (prev && tr.docChanged) {
 							return { ...prev, pos: tr.mapping.map(prev.pos) };
@@ -35,7 +38,7 @@ export const LinkCreationGhostExtension = Extension.create({
 							data.pos,
 							() => {
 								const span = document.createElement("span");
-								span.className = "pm-ghost-text";
+								span.className = GHOST_TEXT_CLASS;
 								span.textContent = data.text;
 								return span;
 							},
