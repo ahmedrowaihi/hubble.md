@@ -197,17 +197,38 @@ async function visitLink(href: string) {
 }
 
 // ── Positioning ─────────────────────────────────────────────────────
+type PositionUpdateReason =
+	| "selection"
+	| "transaction"
+	| "focus"
+	| "blur"
+	| "resize"
+	| "scroll"
+	| "layout";
+
+const PREVIEW_SHELL_INLINE_SIZE = 250;
+const PREVIEW_INLINE_SIZE_END = 174;
+const PREVIEW_HORIZONTAL_OVERFLOW =
+	(PREVIEW_SHELL_INLINE_SIZE - PREVIEW_INLINE_SIZE_END) / 2;
+const MODE_LAYOUT_ANIMATION_WINDOW_MS = 220;
 
 function updateFloatingPosition(
 	editor: Editor,
-	container: HTMLDivElement,
+	viewport: HTMLDivElement,
 	floatingEl: HTMLDivElement,
 	pos: number,
+	mode: PopoverMode,
 	setX: (x: number) => void,
 	setY: (y: number) => void,
 ) {
+	const boundaryPadding = {
+		top: 8,
+		right: mode === "preview" ? -PREVIEW_HORIZONTAL_OVERFLOW : 0,
+		bottom: 8,
+		left: mode === "preview" ? -PREVIEW_HORIZONTAL_OVERFLOW : 0,
+	};
 	const reference: VirtualElement = {
-		contextElement: container,
+		contextElement: viewport,
 		getBoundingClientRect() {
 			const coords = editor.view.coordsAtPos(pos);
 			return {
@@ -225,13 +246,21 @@ function updateFloatingPosition(
 			};
 		},
 	};
+
 	void computePosition(reference, floatingEl, {
-		strategy: "fixed",
+		strategy: "absolute",
 		placement: "top",
 		middleware: [
 			offset(4),
-			flip({ fallbackPlacements: ["bottom"] }),
-			shift({ padding: 8 }),
+			flip({
+				boundary: viewport,
+				fallbackPlacements: ["bottom"],
+				padding: boundaryPadding,
+			}),
+			shift({
+				boundary: viewport,
+				padding: boundaryPadding,
+			}),
 		],
 	}).then(({ x, y }) => {
 		setX(x);
@@ -244,9 +273,11 @@ function updateFloatingPosition(
 export function LinkPopover({
 	editor,
 	containerRef,
+	viewportRef,
 }: {
 	editor: Editor | null;
 	containerRef: RefObject<HTMLDivElement | null>;
+	viewportRef: RefObject<HTMLDivElement | null>;
 }) {
 	const [floatingX, setFloatingX] = useState(0);
 	const [floatingY, setFloatingY] = useState(0);
@@ -263,9 +294,14 @@ export function LinkPopover({
 	const { inputMode } = useEditorInputMode({ editor, containerRef });
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
-	const positionUpdateRef = useRef<(() => void) | null>(null);
+	const positionUpdateRef = useRef<
+		((reason?: PositionUpdateReason) => void) | null
+	>(null);
 	const machineStateRef = useRef(machineState);
+	const positionedLinkKeyRef = useRef<string | null>(null);
+	const modeLayoutAnimationUntilRef = useRef(0);
 	const [isPreviewEntering, setIsPreviewEntering] = useState(false);
+	const [animatePosition, setAnimatePosition] = useState(false);
 
 	// Creation-mode state
 	const [creationCursorPos, setCreationCursorPos] = useState<number | null>(
@@ -286,7 +322,7 @@ export function LinkPopover({
 		const frame = requestAnimationFrame(() => {
 			setIsPreviewEntering(false);
 			requestAnimationFrame(() => {
-				positionUpdateRef.current?.();
+				positionUpdateRef.current?.("layout");
 			});
 		});
 		return () => window.cancelAnimationFrame(frame);
@@ -299,9 +335,20 @@ export function LinkPopover({
 			Boolean(event.activeKey) &&
 			previousState.mode === "hidden" &&
 			previousState.activeKey !== event.activeKey;
+		const shouldAnimatePreviewActionsLayout =
+			(event.type === "EXPAND_REQUESTED" && previousState.mode === "preview") ||
+			(event.type === "TOGGLE_ACTIONS_REQUESTED" &&
+				(previousState.mode === "preview" ||
+					previousState.mode === "actions")) ||
+			(event.type === "ESCAPE_REQUESTED" && previousState.mode === "actions");
 
 		if (shouldAnimateHiddenToPreview) {
 			setIsPreviewEntering(true);
+		}
+		if (shouldAnimatePreviewActionsLayout) {
+			setAnimatePosition(true);
+			modeLayoutAnimationUntilRef.current =
+				performance.now() + MODE_LAYOUT_ANIMATION_WINDOW_MS;
 		}
 		dispatch(event);
 	}, []);
@@ -318,7 +365,7 @@ export function LinkPopover({
 	// ── Link detection + positioning for existing links ─────────────
 	useEffect(() => {
 		if (!editor) return;
-		const update = () => {
+		const update = (reason: PositionUpdateReason = "layout") => {
 			const { link, activeKey } = getLinkSession(editor);
 			setActiveLink(link);
 			if (link) setHrefValue(link.href);
@@ -327,17 +374,31 @@ export function LinkPopover({
 				activeKey,
 			});
 
-			const container = containerRef.current;
+			const viewport = viewportRef.current;
 			const floatingEl = popoverRef.current;
 			const isCreating =
 				machineState.mode === "creating" && creationCursorPos !== null;
 			const shouldPosition = link || machineState.pendingCreation || isCreating;
-			if (!container || !floatingEl || !shouldPosition) return;
+			const withinModeAnimationWindow =
+				performance.now() < modeLayoutAnimationUntilRef.current;
+			const shouldAnimateModeLayout =
+				withinModeAnimationWindow && reason !== "scroll" && reason !== "resize";
+			const shouldAnimate =
+				shouldAnimateModeLayout ||
+				(inputMode === "keyboard" &&
+					reason === "selection" &&
+					machineStateRef.current.mode === "preview" &&
+					Boolean(activeKey) &&
+					positionedLinkKeyRef.current === activeKey);
+			setAnimatePosition(shouldAnimate);
+			positionedLinkKeyRef.current = activeKey;
+			if (!viewport || !floatingEl || !shouldPosition) return;
 			updateFloatingPosition(
 				editor,
-				container,
+				viewport,
 				floatingEl,
 				isCreating ? creationCursorPos : editor.state.selection.from,
+				machineState.mode,
 				setFloatingX,
 				setFloatingY,
 			);
@@ -345,29 +406,39 @@ export function LinkPopover({
 		positionUpdateRef.current = update;
 
 		update();
-		editor.on("selectionUpdate", update);
-		editor.on("transaction", update);
-		editor.on("focus", update);
-		editor.on("blur", update);
-		window.addEventListener("resize", update);
-		window.addEventListener("scroll", update, true);
+		const handleSelectionUpdate = () => update("selection");
+		const handleTransaction = () => update("transaction");
+		const handleFocus = () => update("focus");
+		const handleBlur = () => update("blur");
+		const handleResize = () => update("resize");
+		const handleScroll = () => update("scroll");
+
+		editor.on("selectionUpdate", handleSelectionUpdate);
+		editor.on("transaction", handleTransaction);
+		editor.on("focus", handleFocus);
+		editor.on("blur", handleBlur);
+		window.addEventListener("resize", handleResize);
+		viewportRef.current?.addEventListener("scroll", handleScroll, {
+			passive: true,
+		});
 
 		return () => {
 			positionUpdateRef.current = null;
-			editor.off("selectionUpdate", update);
-			editor.off("transaction", update);
-			editor.off("focus", update);
-			editor.off("blur", update);
-			window.removeEventListener("resize", update);
-			window.removeEventListener("scroll", update, true);
+			editor.off("selectionUpdate", handleSelectionUpdate);
+			editor.off("transaction", handleTransaction);
+			editor.off("focus", handleFocus);
+			editor.off("blur", handleBlur);
+			window.removeEventListener("resize", handleResize);
+			viewportRef.current?.removeEventListener("scroll", handleScroll);
 		};
 	}, [
 		editor,
-		containerRef,
+		viewportRef,
 		dispatchMachineEvent,
 		machineState.mode,
 		machineState.pendingCreation,
 		creationCursorPos,
+		inputMode,
 	]);
 
 	// ── Listen for FOCUS_LINK_POPOVER_EVENT (selection-based flow) ──
@@ -406,7 +477,7 @@ export function LinkPopover({
 
 	// ── Focus input when entering creating or actions mode ──────────
 	useEffect(() => {
-		positionUpdateRef.current?.();
+		positionUpdateRef.current?.("layout");
 		if (machineState.mode !== "actions" && machineState.mode !== "creating")
 			return;
 		queueMicrotask(() => {
@@ -640,10 +711,8 @@ export function LinkPopover({
 		<div
 			ref={popoverRef}
 			className={cn(
-				"fixed z-[4] w-[250px] transition-position motion-reduce:transition-none",
-				machineState.mode === "actions" || machineState.mode === "creating"
-					? "duration-[var(--default-transition-duration)] ease-spring-snappy"
-					: "duration-[var(--cursor-motion-duration)] ease-cursor-motion",
+				"absolute z-[4] w-[250px]",
+				animatePosition && "transition-position motion-reduce:transition-none duration-[var(--cursor-motion-duration)] ease-cursor-motion"
 			)}
 			style={{
 				insetInlineStart: `${floatingX}px`,
