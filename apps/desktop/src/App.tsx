@@ -472,8 +472,12 @@ function MarkdownEditor({
 					containerRef={editorRootRef}
 					viewportRef={editorViewportRef}
 				/>
+				<LinkPopover
+					editor={editor}
+					containerRef={editorRootRef}
+					viewportRef={editorViewportRef}
+				/>
 			</div>
-			<LinkPopover editor={editor} containerRef={editorRootRef} />
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
 		</div>
 	);

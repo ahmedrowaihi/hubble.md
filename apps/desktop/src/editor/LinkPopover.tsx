@@ -127,6 +127,69 @@ function getLinkSession(editor: Editor) {
 	};
 }
 
+// ── Anchor state ────────────────────────────────────────────────────
+// The popover is "anchored" to a link once it has entered the link AND
+// its floating position has been computed at least once. CSS transitions
+// are only applied while anchored — this prevents jarring motion when
+// jumping between links (keyboard or mouse) or clicking around with the
+// pointer. The anchor detaches on any pointer-driven selection and on
+// keyboard moves that land on a different link; it re-anchors after the
+// first position compute on the new link.
+
+type LinkAnchorState = {
+	// The link the cursor is currently inside.
+	activeKey: string | null;
+	// The link the popover has been positioned over at least once.
+	// When anchoredKey === activeKey, transitions are enabled.
+	anchoredKey: string | null;
+};
+
+type LinkAnchorEvent =
+	| {
+			// Fired on every editor update; carries the new active link and
+			// whether this change should detach the anchor.
+			type: "LINK_SYNCED";
+			activeKey: string | null;
+			shouldDetach: boolean;
+	  }
+	| {
+			// Fired after floating-ui resolves the popover position, marking
+			// the popover as fully anchored to activeKey.
+			type: "POSITIONED";
+			activeKey: string | null;
+	  };
+
+const INITIAL_LINK_ANCHOR_STATE: LinkAnchorState = {
+	activeKey: null,
+	anchoredKey: null,
+};
+
+function linkAnchorReducer(
+	state: LinkAnchorState,
+	event: LinkAnchorEvent,
+): LinkAnchorState {
+	switch (event.type) {
+		case "LINK_SYNCED": {
+			const { activeKey, shouldDetach } = event;
+			if (!activeKey) return INITIAL_LINK_ANCHOR_STATE;
+			// Detach (drop anchoredKey) when moving to a new link or when the
+			// caller signals the move should suppress animation.
+			if (shouldDetach || state.activeKey !== activeKey) {
+				return { activeKey, anchoredKey: null };
+			}
+			return { ...state, activeKey };
+		}
+		case "POSITIONED": {
+			const { activeKey } = event;
+			// Only anchor if the position resolves for the link we're tracking.
+			if (!activeKey || state.activeKey !== activeKey) return state;
+			return { activeKey, anchoredKey: activeKey };
+		}
+		default:
+			return state;
+	}
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 async function copyLinkToClipboard(href: string) {
@@ -197,17 +260,60 @@ async function visitLink(href: string) {
 }
 
 // ── Positioning ─────────────────────────────────────────────────────
+type PositionUpdateReason =
+	| "selection"
+	| "transaction"
+	| "focus"
+	| "blur"
+	| "resize"
+	| "scroll"
+	| "layout";
+
+const PREVIEW_SHELL_INLINE_SIZE = 250;
+const PREVIEW_INLINE_SIZE_START = 100;
+const PREVIEW_INLINE_SIZE_END = 174;
+const PREVIEW_HORIZONTAL_OVERFLOW =
+	(PREVIEW_SHELL_INLINE_SIZE - PREVIEW_INLINE_SIZE_END) / 2;
+const PREVIEW_REVEAL_DURATION_MS = 180;
+
+// Returns true when a selection change should detach the anchor,
+// suppressing position transitions on the next update.
+// Detaches when:
+//   - the user moved with the pointer (mouse/trackpad click)
+//   - the cursor jumped to a different link via keyboard
+function shouldDetachAnchor({
+	reason,
+	inputMode,
+	activeKey,
+	previousSelectionActiveKey,
+}: {
+	reason: PositionUpdateReason;
+	inputMode: "pointer" | "keyboard";
+	activeKey: string | null;
+	previousSelectionActiveKey: string | null;
+}) {
+	if (!activeKey || reason !== "selection") return false;
+	if (inputMode === "pointer") return true;
+	return previousSelectionActiveKey !== activeKey;
+}
 
 function updateFloatingPosition(
 	editor: Editor,
-	container: HTMLDivElement,
+	viewport: HTMLDivElement,
 	floatingEl: HTMLDivElement,
 	pos: number,
+	mode: PopoverMode,
 	setX: (x: number) => void,
 	setY: (y: number) => void,
 ) {
+	const boundaryPadding = {
+		top: 8,
+		right: mode === "preview" ? -PREVIEW_HORIZONTAL_OVERFLOW : 0,
+		bottom: 8,
+		left: mode === "preview" ? -PREVIEW_HORIZONTAL_OVERFLOW : 0,
+	};
 	const reference: VirtualElement = {
-		contextElement: container,
+		contextElement: viewport,
 		getBoundingClientRect() {
 			const coords = editor.view.coordsAtPos(pos);
 			return {
@@ -225,13 +331,21 @@ function updateFloatingPosition(
 			};
 		},
 	};
-	void computePosition(reference, floatingEl, {
-		strategy: "fixed",
+
+	return computePosition(reference, floatingEl, {
+		strategy: "absolute",
 		placement: "top",
 		middleware: [
 			offset(4),
-			flip({ fallbackPlacements: ["bottom"] }),
-			shift({ padding: 8 }),
+			flip({
+				boundary: viewport,
+				fallbackPlacements: ["bottom"],
+				padding: boundaryPadding,
+			}),
+			shift({
+				boundary: viewport,
+				padding: boundaryPadding,
+			}),
 		],
 	}).then(({ x, y }) => {
 		setX(x);
@@ -239,14 +353,117 @@ function updateFloatingPosition(
 	});
 }
 
+function playPreviewRevealAnimation(previewButton: HTMLButtonElement) {
+	const easing =
+		getComputedStyle(previewButton)
+			.getPropertyValue("--ease-spring-snappy")
+			.trim() || "ease-out";
+	return previewButton.animate(
+		[
+			{
+				inlineSize: `${PREVIEW_INLINE_SIZE_START}px`,
+				opacity: 0.82,
+				transform: "translateY(2px) scale(0.985)",
+			},
+			{
+				inlineSize: `${PREVIEW_INLINE_SIZE_END}px`,
+				opacity: 1,
+				transform: "translateY(0) scale(1)",
+			},
+		],
+		{
+			duration: PREVIEW_REVEAL_DURATION_MS,
+			easing,
+		},
+	);
+}
+
+function usePreviewRevealAnimation({
+	mode,
+	activeKey,
+	inputMode,
+	positionUpdateRef,
+}: {
+	mode: PopoverMode;
+	activeKey: string | null;
+	inputMode: "pointer" | "keyboard";
+	positionUpdateRef: RefObject<
+		((reason?: PositionUpdateReason) => void) | null
+	>;
+}) {
+	const previewButtonRef = useRef<HTMLButtonElement | null>(null);
+	const previewRevealAnimationRef = useRef<Animation | null>(null);
+	const previousPopoverModeRef = useRef<PopoverMode>(mode);
+	const previousPreviewKeyRef = useRef<string | null>(activeKey);
+
+	const playPreviewReveal = useCallback(() => {
+		const previewButton = previewButtonRef.current;
+		if (!previewButton) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		previewRevealAnimationRef.current?.cancel();
+		const animation = playPreviewRevealAnimation(previewButton);
+		previewRevealAnimationRef.current = animation;
+		animation.addEventListener(
+			"finish",
+			() => {
+				if (previewRevealAnimationRef.current === animation) {
+					previewRevealAnimationRef.current = null;
+				}
+				positionUpdateRef.current?.("layout");
+			},
+			{ once: true },
+		);
+		animation.addEventListener(
+			"cancel",
+			() => {
+				if (previewRevealAnimationRef.current === animation) {
+					previewRevealAnimationRef.current = null;
+				}
+			},
+			{ once: true },
+		);
+	}, [positionUpdateRef]);
+
+	useEffect(() => {
+		return () => {
+			previewRevealAnimationRef.current?.cancel();
+		};
+	}, []);
+
+	useEffect(() => {
+		const previousMode = previousPopoverModeRef.current;
+		const previousPreviewKey = previousPreviewKeyRef.current;
+		const shouldRevealFromHidden =
+			previousMode === "hidden" && mode === "preview";
+		const shouldReplayPreviewReveal =
+			previousMode === "preview" &&
+			mode === "preview" &&
+			inputMode === "pointer" &&
+			previousPreviewKey !== null &&
+			activeKey !== null &&
+			previousPreviewKey !== activeKey;
+
+		if (shouldRevealFromHidden || shouldReplayPreviewReveal) {
+			playPreviewReveal();
+		}
+
+		previousPopoverModeRef.current = mode;
+		previousPreviewKeyRef.current = activeKey;
+	}, [mode, activeKey, inputMode, playPreviewReveal]);
+
+	return previewButtonRef;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 export function LinkPopover({
 	editor,
 	containerRef,
+	viewportRef,
 }: {
 	editor: Editor | null;
 	containerRef: RefObject<HTMLDivElement | null>;
+	viewportRef: RefObject<HTMLDivElement | null>;
 }) {
 	const [floatingX, setFloatingX] = useState(0);
 	const [floatingY, setFloatingY] = useState(0);
@@ -263,9 +480,20 @@ export function LinkPopover({
 	const { inputMode } = useEditorInputMode({ editor, containerRef });
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
-	const positionUpdateRef = useRef<(() => void) | null>(null);
+	const positionUpdateRef = useRef<
+		((reason?: PositionUpdateReason) => void) | null
+	>(null);
 	const machineStateRef = useRef(machineState);
-	const [isPreviewEntering, setIsPreviewEntering] = useState(false);
+	const anchorRef = useRef(INITIAL_LINK_ANCHOR_STATE);
+	const lastSelectionActiveKeyRef = useRef<string | null>(null);
+	const positionRequestIdRef = useRef(0);
+	const [animatePosition, setAnimatePosition] = useState(false);
+	const previewButtonRef = usePreviewRevealAnimation({
+		mode: machineState.mode,
+		activeKey: machineState.activeKey,
+		inputMode,
+		positionUpdateRef,
+	});
 
 	// Creation-mode state
 	const [creationCursorPos, setCreationCursorPos] = useState<number | null>(
@@ -277,33 +505,14 @@ export function LinkPopover({
 		machineStateRef.current = machineState;
 	}, [machineState]);
 
-	useEffect(() => {
-		if (machineState.mode !== "preview") {
-			setIsPreviewEntering(false);
-			return;
-		}
-		if (!isPreviewEntering) return;
-		const frame = requestAnimationFrame(() => {
-			setIsPreviewEntering(false);
-			requestAnimationFrame(() => {
-				positionUpdateRef.current?.();
-			});
-		});
-		return () => window.cancelAnimationFrame(frame);
-	}, [machineState.mode, isPreviewEntering]);
-
 	const dispatchMachineEvent = useCallback((event: MachineEvent) => {
 		const previousState = machineStateRef.current;
-		const shouldAnimateHiddenToPreview =
-			event.type === "LINK_SESSION_CHANGED" &&
-			Boolean(event.activeKey) &&
-			previousState.mode === "hidden" &&
-			previousState.activeKey !== event.activeKey;
-
-		if (shouldAnimateHiddenToPreview) {
-			setIsPreviewEntering(true);
-		}
+		const nextState = machineReducer(previousState, event);
+		machineStateRef.current = nextState;
 		dispatch(event);
+	}, []);
+	const setAnchorState = useCallback((event: LinkAnchorEvent) => {
+		anchorRef.current = linkAnchorReducer(anchorRef.current, event);
 	}, []);
 	const openCreationTitleInput = useCallback(() => {
 		if (!editor || creationCursorPos === null) return;
@@ -318,7 +527,7 @@ export function LinkPopover({
 	// ── Link detection + positioning for existing links ─────────────
 	useEffect(() => {
 		if (!editor) return;
-		const update = () => {
+		const update = (reason: PositionUpdateReason = "layout") => {
 			const { link, activeKey } = getLinkSession(editor);
 			setActiveLink(link);
 			if (link) setHrefValue(link.href);
@@ -327,47 +536,92 @@ export function LinkPopover({
 				activeKey,
 			});
 
-			const container = containerRef.current;
+			const viewport = viewportRef.current;
 			const floatingEl = popoverRef.current;
 			const isCreating =
-				machineState.mode === "creating" && creationCursorPos !== null;
-			const shouldPosition = link || machineState.pendingCreation || isCreating;
-			if (!container || !floatingEl || !shouldPosition) return;
-			updateFloatingPosition(
+				machineStateRef.current.mode === "creating" &&
+				creationCursorPos !== null;
+			const shouldPosition = Boolean(
+				link || machineStateRef.current.pendingCreation || isCreating,
+			);
+			// Transitions are allowed only when the popover is already anchored
+			// to this exact link. Read the ref before advancing so we can compare
+			// against the previous anchor state.
+			const isAnchored =
+				activeKey !== null &&
+				anchorRef.current.activeKey === activeKey &&
+				anchorRef.current.anchoredKey === activeKey;
+			const shouldDetach = shouldDetachAnchor({
+				reason,
+				inputMode,
+				activeKey,
+				previousSelectionActiveKey: lastSelectionActiveKeyRef.current,
+			});
+
+			setAnchorState({
+				type: "LINK_SYNCED",
+				activeKey,
+				shouldDetach,
+			});
+			setAnimatePosition(
+				isAnchored &&
+					reason !== "scroll" &&
+					reason !== "resize" &&
+					!shouldDetach,
+			);
+			if (reason === "selection") {
+				lastSelectionActiveKeyRef.current = activeKey;
+			}
+			if (!viewport || !floatingEl || !shouldPosition) return;
+			const requestId = ++positionRequestIdRef.current;
+			void updateFloatingPosition(
 				editor,
-				container,
+				viewport,
 				floatingEl,
 				isCreating ? creationCursorPos : editor.state.selection.from,
+				machineStateRef.current.mode,
 				setFloatingX,
 				setFloatingY,
-			);
+			).then(() => {
+				if (requestId !== positionRequestIdRef.current) return;
+				setAnchorState({ type: "POSITIONED", activeKey });
+			});
 		};
 		positionUpdateRef.current = update;
-
 		update();
-		editor.on("selectionUpdate", update);
-		editor.on("transaction", update);
-		editor.on("focus", update);
-		editor.on("blur", update);
-		window.addEventListener("resize", update);
-		window.addEventListener("scroll", update, true);
+
+		const handleSelectionUpdate = () => update("selection");
+		const handleTransaction = () => update("transaction");
+		const handleFocus = () => update("focus");
+		const handleBlur = () => update("blur");
+		const handleResize = () => update("resize");
+		const handleScroll = () => update("scroll");
+
+		editor.on("selectionUpdate", handleSelectionUpdate);
+		editor.on("transaction", handleTransaction);
+		editor.on("focus", handleFocus);
+		editor.on("blur", handleBlur);
+		window.addEventListener("resize", handleResize);
+		viewportRef.current?.addEventListener("scroll", handleScroll, {
+			passive: true,
+		});
 
 		return () => {
 			positionUpdateRef.current = null;
-			editor.off("selectionUpdate", update);
-			editor.off("transaction", update);
-			editor.off("focus", update);
-			editor.off("blur", update);
-			window.removeEventListener("resize", update);
-			window.removeEventListener("scroll", update, true);
+			editor.off("selectionUpdate", handleSelectionUpdate);
+			editor.off("transaction", handleTransaction);
+			editor.off("focus", handleFocus);
+			editor.off("blur", handleBlur);
+			window.removeEventListener("resize", handleResize);
+			viewportRef.current?.removeEventListener("scroll", handleScroll);
 		};
 	}, [
 		editor,
-		containerRef,
+		viewportRef,
 		dispatchMachineEvent,
-		machineState.mode,
-		machineState.pendingCreation,
+		setAnchorState,
 		creationCursorPos,
+		inputMode,
 	]);
 
 	// ── Listen for FOCUS_LINK_POPOVER_EVENT (selection-based flow) ──
@@ -406,7 +660,7 @@ export function LinkPopover({
 
 	// ── Focus input when entering creating or actions mode ──────────
 	useEffect(() => {
-		positionUpdateRef.current?.();
+		positionUpdateRef.current?.("layout");
 		if (machineState.mode !== "actions" && machineState.mode !== "creating")
 			return;
 		queueMicrotask(() => {
@@ -460,14 +714,20 @@ export function LinkPopover({
 				if (link) setHrefValue(link.href);
 				// Clicking anywhere else should behave like Escape: exit creation
 				// mode, then recompute visibility from the editor's real selection.
-				dispatch({ type: "ESCAPE_REQUESTED" });
-				dispatch({ type: "LINK_SESSION_CHANGED", activeKey });
+				dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
+				dispatchMachineEvent({ type: "LINK_SESSION_CHANGED", activeKey });
 			});
 		};
 
 		window.addEventListener("pointerdown", onPointerDown, true);
 		return () => window.removeEventListener("pointerdown", onPointerDown, true);
-	}, [editor, machineState.mode, creationCursorPos, openCreationTitleInput]);
+	}, [
+		editor,
+		machineState.mode,
+		creationCursorPos,
+		openCreationTitleInput,
+		dispatchMachineEvent,
+	]);
 
 	// ── Keyboard: creating mode ─────────────────────────────────────
 	useEffect(() => {
@@ -640,10 +900,9 @@ export function LinkPopover({
 		<div
 			ref={popoverRef}
 			className={cn(
-				"fixed z-[4] w-[250px] transition-position motion-reduce:transition-none",
-				machineState.mode === "actions" || machineState.mode === "creating"
-					? "duration-[var(--default-transition-duration)] ease-spring-snappy"
-					: "duration-[var(--cursor-motion-duration)] ease-cursor-motion",
+				"absolute z-[4] w-[250px]",
+				animatePosition &&
+					"transition-position motion-reduce:transition-none duration-[var(--cursor-motion-duration)] ease-cursor-motion",
 			)}
 			style={{
 				insetInlineStart: `${floatingX}px`,
@@ -669,16 +928,13 @@ export function LinkPopover({
 			) : machineState.mode === "preview" ? (
 				<div className="flex justify-center">
 					<Button
+						ref={previewButtonRef}
 						variant="outline"
 						size="sm"
 						className={cn(
 							"h-7 min-w-0 justify-start gap-0 overflow-hidden border-border bg-card px-0 text-left shadow-panel inset-shadow-chrome hover:bg-card",
 							styles.previewButton,
-							isPreviewEntering && styles.previewButtonEnter,
 						)}
-						onTransitionEnd={() => {
-							positionUpdateRef.current?.();
-						}}
 						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 					>
 						<span
