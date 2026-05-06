@@ -2,8 +2,8 @@ import type { Editor } from "@tiptap/core";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/utils";
 import { useEditorInputMode } from "./useEditorInputMode";
+import type { VirtualCursorMode } from "./virtualCursorMode";
 
-type CursorStyle = "hidden" | "solid" | "blinking";
 type CursorPosition = {
 	left: number;
 	top: number;
@@ -18,12 +18,14 @@ export function VirtualCursor({
 	editor,
 	containerRef,
 	viewportRef,
+	modeOverride,
 }: {
 	editor: Editor | null;
 	containerRef: RefObject<HTMLDivElement | null>;
 	viewportRef: RefObject<HTMLDivElement | null>;
+	modeOverride?: VirtualCursorMode | null;
 }) {
-	const [cursorStyle, setCursorStyle] = useState<CursorStyle>("hidden");
+	const [cursorMode, setCursorMode] = useState<VirtualCursorMode>("hidden");
 	const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(
 		null,
 	);
@@ -32,7 +34,14 @@ export function VirtualCursor({
 	const { inputMode } = useEditorInputMode({ editor, containerRef });
 
 	useEffect(() => {
-		if (!editor) return;
+		if (!editor) {
+			if (blinkTimeoutRef.current !== null) {
+				window.clearTimeout(blinkTimeoutRef.current);
+				blinkTimeoutRef.current = null;
+			}
+			setCursorMode("hidden");
+			return;
+		}
 		const scrollContainer = viewportRef.current;
 
 		const clearBlinkTimeout = () => {
@@ -43,23 +52,37 @@ export function VirtualCursor({
 		};
 
 		const queueBlink = () => {
-			setCursorStyle("solid");
+			setCursorMode("solid");
 			clearBlinkTimeout();
 			blinkTimeoutRef.current = window.setTimeout(() => {
-				setCursorStyle("blinking");
+				setCursorMode("blinking");
 			}, BLINK_DELAY_MS);
 		};
 
 		const updateCursor = () => {
 			const container = scrollContainer;
 			if (!container || !editor.view) {
-				setCursorStyle("hidden");
+				clearBlinkTimeout();
+				setCursorMode("hidden");
 				return;
 			}
 
 			const { state, view } = editor;
-			if (!state.selection.empty || !editor.isFocused) {
-				setCursorStyle("hidden");
+			if (!state.selection.empty) {
+				clearBlinkTimeout();
+				setCursorMode("hidden");
+				return;
+			}
+
+			if (modeOverride === "hidden") {
+				clearBlinkTimeout();
+				setCursorMode("hidden");
+				return;
+			}
+
+			if (!editor.isFocused && !modeOverride) {
+				clearBlinkTimeout();
+				setCursorMode("hidden");
 				return;
 			}
 
@@ -79,6 +102,13 @@ export function VirtualCursor({
 				height: scaledHeight,
 			});
 			setAnimatePosition(inputMode === "keyboard");
+
+			if (modeOverride) {
+				clearBlinkTimeout();
+				setCursorMode(modeOverride);
+				return;
+			}
+
 			queueBlink();
 		};
 
@@ -101,15 +131,15 @@ export function VirtualCursor({
 			window.removeEventListener("resize", updateCursor);
 			clearBlinkTimeout();
 		};
-	}, [editor, inputMode, viewportRef]);
+	}, [editor, inputMode, modeOverride, viewportRef]);
 
-	if (!cursorPosition || cursorStyle === "hidden") return null;
+	if (!cursorPosition || cursorMode === "hidden") return null;
 
 	return (
 		<span
 			className={cn(
 				"pm-virtual-cursor",
-				cursorStyle === "blinking" && "blinking",
+				cursorMode === "blinking" && "blinking",
 				!animatePosition && "no-position-transition",
 			)}
 			aria-hidden="true"

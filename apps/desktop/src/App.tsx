@@ -27,6 +27,7 @@ import { LinkCreationGhostExtension } from "./editor/LinkCreationGhostExtension"
 import { LinkPopover } from "./editor/LinkPopover";
 import { SmartLinkExtension } from "./editor/SmartLinkExtension";
 import { VirtualCursor } from "./editor/VirtualCursor";
+import type { VirtualCursorMode } from "./editor/virtualCursorMode";
 import { createNote } from "./noteActions";
 import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
@@ -379,6 +380,8 @@ function MarkdownEditor({
 	const editorViewportRef = useRef<HTMLDivElement | null>(null);
 	const [editorViewportEl, setEditorViewportEl] =
 		useState<HTMLDivElement | null>(null);
+	const [cursorModeOverride, setCursorModeOverride] =
+		useState<VirtualCursorMode | null>(null);
 	const setEditorViewport = useCallback(
 		(node: HTMLDivElement | null) => {
 			editorViewportRef.current = node;
@@ -471,11 +474,13 @@ function MarkdownEditor({
 					editor={editor}
 					containerRef={editorRootRef}
 					viewportRef={editorViewportRef}
+					modeOverride={cursorModeOverride}
 				/>
 				<LinkPopover
 					editor={editor}
 					containerRef={editorRootRef}
 					viewportRef={editorViewportRef}
+					onCursorModeChange={setCursorModeOverride}
 				/>
 			</div>
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />

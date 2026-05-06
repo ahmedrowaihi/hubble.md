@@ -31,6 +31,7 @@ import {
 	LINK_CREATION_REQUESTED_EVENT,
 } from "./SmartLinkExtension";
 import { useEditorInputMode } from "./useEditorInputMode";
+import type { VirtualCursorMode } from "./virtualCursorMode";
 
 // ── State machine ───────────────────────────────────────────────────
 
@@ -117,6 +118,12 @@ function machineReducer(
 		default:
 			return state;
 	}
+}
+
+function getCursorModeForMachineState(
+	state: MachineState,
+): VirtualCursorMode | null {
+	return state.mode === "actions" || state.pendingCreation ? "solid" : null;
 }
 
 function getLinkSession(editor: Editor) {
@@ -460,10 +467,12 @@ export function LinkPopover({
 	editor,
 	containerRef,
 	viewportRef,
+	onCursorModeChange,
 }: {
 	editor: Editor | null;
 	containerRef: RefObject<HTMLDivElement | null>;
 	viewportRef: RefObject<HTMLDivElement | null>;
+	onCursorModeChange?: (mode: VirtualCursorMode | null) => void;
 }) {
 	const [floatingX, setFloatingX] = useState(0);
 	const [floatingY, setFloatingY] = useState(0);
@@ -505,12 +514,16 @@ export function LinkPopover({
 		machineStateRef.current = machineState;
 	}, [machineState]);
 
-	const dispatchMachineEvent = useCallback((event: MachineEvent) => {
-		const previousState = machineStateRef.current;
-		const nextState = machineReducer(previousState, event);
-		machineStateRef.current = nextState;
-		dispatch(event);
-	}, []);
+	const dispatchMachineEvent = useCallback(
+		(event: MachineEvent) => {
+			const previousState = machineStateRef.current;
+			const nextState = machineReducer(previousState, event);
+			machineStateRef.current = nextState;
+			onCursorModeChange?.(getCursorModeForMachineState(nextState));
+			dispatch(event);
+		},
+		[onCursorModeChange],
+	);
 	const setAnchorState = useCallback((event: LinkAnchorEvent) => {
 		anchorRef.current = linkAnchorReducer(anchorRef.current, event);
 	}, []);
