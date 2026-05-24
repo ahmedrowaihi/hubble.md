@@ -1,4 +1,5 @@
 import { createConvexSubscriber } from "@hubble.md/convex-client";
+import { AppShellFrame } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -16,7 +17,6 @@ import { viewerStore, workspaceStore } from "../store/state";
 import { EditorView } from "./EditorView";
 import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 type Props = {
 	url: string;
@@ -34,13 +34,21 @@ export function AppShell({
 	onDisconnect,
 }: Props) {
 	const viewer = useStoreValue(viewerStore);
-	const [switcherOpen, setSwitcherOpen] = useState(false);
 	const [newNoteName, setNewNoteName] = useState<string | null>(null);
 	const newNoteInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		initActions(url, workspaceId);
-		void refreshFiles();
+		void (async () => {
+			const files = await refreshFiles();
+			const lastOpenedPath = workspaceStore.get().lastOpenedPaths[workspaceId];
+			if (
+				lastOpenedPath &&
+				files.some((file) => file.path === lastOpenedPath)
+			) {
+				await loadPath(lastOpenedPath);
+			}
+		})();
 		return () => {
 			teardownActions();
 		};
@@ -95,7 +103,7 @@ export function AppShell({
 				updatedAt: f.updatedAt,
 				deleted: f.deleted,
 			}));
-		workspaceStore.set({ files: visible });
+		workspaceStore.set((state) => ({ ...state, files: visible }));
 
 		const v = viewerStore.get();
 		if (!v.currentPath) return;
@@ -108,103 +116,87 @@ export function AppShell({
 	};
 
 	return (
-		<main className="flex h-dvh flex-col bg-background text-foreground">
-			<Toolbar
-				workspaceName={workspaceName}
-				onSwitcherOpen={() => setSwitcherOpen(true)}
-				onNewNote={handleNewNote}
-			/>
-			<div className="flex min-h-0 flex-1 overflow-hidden">
-				<Sidebar />
-				<section className="flex-1 overflow-hidden" aria-live="polite">
-					{newNoteName !== null && (
-						<form
-							onSubmit={submitNewNote}
-							className="border-b border-border bg-muted/40 px-3 py-2"
-						>
-							<div className="mx-auto flex max-w-3xl items-center gap-2">
-								<input
-									ref={newNoteInputRef}
-									type="text"
-									required
-									value={newNoteName}
-									onChange={(e) => setNewNoteName(e.target.value)}
-									placeholder="note-name.md"
-									className="flex-1 rounded-sm border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring"
-								/>
-								<button
-									type="submit"
-									className="rounded-sm bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
-								>
-									Create
-								</button>
-								<button
-									type="button"
-									onClick={() => setNewNoteName(null)}
-									className="rounded-sm px-3 py-1 text-xs text-muted-foreground hover:bg-sidebar-accent"
-								>
-									Cancel
-								</button>
-							</div>
-						</form>
-					)}
-					{viewer.currentPath && (
-						<div className="flex h-full min-h-0 flex-col">
-							{viewer.externalChange.kind === "conflict" && (
-								<ExternalChangeBanner
-									message="Remote changes available. Reload to accept."
-									onReload={reloadFromRemote}
-								/>
-							)}
-							{viewer.externalChange.kind === "deleted" && (
-								<ExternalChangeBanner
-									message="This file was deleted remotely. Reload before editing."
-									onReload={() => {
-										if (viewer.currentPath) void loadPath(viewer.currentPath);
-									}}
-								/>
-							)}
-							<EditorView
-								path={viewer.currentPath}
-								initialMarkdown={viewer.content}
-							/>
-						</div>
-					)}
-					{!viewer.currentPath && viewer.status === "loading" && (
-						<p className="p-6 text-sm text-muted-foreground">Loading…</p>
-					)}
-					{!viewer.currentPath && viewer.status === "error" && (
-						<p className="p-6 text-sm text-destructive">{viewer.error}</p>
-					)}
-					{!viewer.currentPath &&
-						viewer.status !== "loading" &&
-						viewer.status !== "error" && (
-							<div className="flex h-full items-center justify-center p-6">
-								<p className="text-sm text-muted-foreground">
-									Select a file, or create a new one with +.
-								</p>
-							</div>
-						)}
-				</section>
-			</div>
-			{switcherOpen && (
-				<WorkspaceSwitcher
+		<AppShellFrame
+			sidebar={
+				<Sidebar
 					url={url}
-					currentWorkspaceId={workspaceId}
-					onSelect={(id, name) => {
-						setSwitcherOpen(false);
-						if (id !== workspaceId) {
-							onSwitch(id, name);
-						}
-					}}
-					onClose={() => setSwitcherOpen(false)}
-					onDisconnect={() => {
-						setSwitcherOpen(false);
-						onDisconnect();
-					}}
+					workspaceId={workspaceId}
+					workspaceName={workspaceName}
+					onSwitch={onSwitch}
+					onDisconnect={onDisconnect}
 				/>
+			}
+			toolbar={<Toolbar onNewNote={handleNewNote} />}
+		>
+			{newNoteName !== null && (
+				<form
+					onSubmit={submitNewNote}
+					className="border-b border-border bg-muted/40 px-3 py-2"
+				>
+					<div className="mx-auto flex max-w-3xl items-center gap-2">
+						<input
+							ref={newNoteInputRef}
+							type="text"
+							required
+							value={newNoteName}
+							onChange={(e) => setNewNoteName(e.target.value)}
+							placeholder="note-name.md"
+							className="flex-1 rounded-sm border border-border bg-background px-2 py-1 text-sm outline-none focus:border-ring"
+						/>
+						<button
+							type="submit"
+							className="rounded-sm bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+						>
+							Create
+						</button>
+						<button
+							type="button"
+							onClick={() => setNewNoteName(null)}
+							className="rounded-sm px-3 py-1 text-xs text-muted-foreground hover:bg-sidebar-accent"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
 			)}
-		</main>
+			{viewer.currentPath && (
+				<div className="flex h-full min-h-0 flex-col">
+					{viewer.externalChange.kind === "conflict" && (
+						<ExternalChangeBanner
+							message="Remote changes available. Reload to accept."
+							onReload={reloadFromRemote}
+						/>
+					)}
+					{viewer.externalChange.kind === "deleted" && (
+						<ExternalChangeBanner
+							message="This file was deleted remotely. Reload before editing."
+							onReload={() => {
+								if (viewer.currentPath) void loadPath(viewer.currentPath);
+							}}
+						/>
+					)}
+					<EditorView
+						path={viewer.currentPath}
+						initialMarkdown={viewer.content}
+					/>
+				</div>
+			)}
+			{!viewer.currentPath && viewer.status === "loading" && (
+				<p className="p-6 text-sm text-muted-foreground">Loading…</p>
+			)}
+			{!viewer.currentPath && viewer.status === "error" && (
+				<p className="p-6 text-sm text-destructive">{viewer.error}</p>
+			)}
+			{!viewer.currentPath &&
+				viewer.status !== "loading" &&
+				viewer.status !== "error" && (
+					<div className="flex h-full items-center justify-center p-6">
+						<p className="text-sm text-muted-foreground">
+							Select a file, or create a new one with +.
+						</p>
+					</div>
+				)}
+		</AppShellFrame>
 	);
 }
 

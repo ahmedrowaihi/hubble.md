@@ -1,4 +1,6 @@
 import { store } from "@simplestack/store";
+import { localStoragePersist } from "../lib/localStoragePersist";
+import { readLastOpenedPaths, STORAGE_KEY, serialize } from "./persistence";
 
 export type FileEntry = {
 	path: string;
@@ -29,6 +31,7 @@ export type ViewerState = {
 
 export type WorkspaceState = {
 	files: FileEntry[];
+	lastOpenedPaths: Record<string, string>;
 };
 
 export type AppState = {
@@ -36,21 +39,30 @@ export type AppState = {
 	viewer: ViewerState;
 };
 
-const initialState: AppState = {
-	workspace: { files: [] },
-	viewer: {
-		currentPath: null,
-		pendingPath: null,
-		content: "",
-		savedContent: "",
-		basedOnHash: null,
-		externalChange: NO_CONFLICT,
-		status: "idle",
-		error: null,
-	},
-};
+function getInitialState(
+	lastOpenedPaths: Record<string, string> = readLastOpenedPaths(),
+): AppState {
+	return {
+		workspace: { files: [], lastOpenedPaths },
+		viewer: {
+			currentPath: null,
+			pendingPath: null,
+			content: "",
+			savedContent: "",
+			basedOnHash: null,
+			externalChange: NO_CONFLICT,
+			status: "idle",
+			error: null,
+		},
+	};
+}
 
-export const appStore = store<AppState>(initialState);
+const initialState: AppState = getInitialState();
+
+export const appStore = store<AppState>(initialState, {
+	middleware: [localStoragePersist(STORAGE_KEY, serialize)],
+});
+
 export const workspaceStore = appStore.select("workspace");
 export const viewerStore = appStore.select("viewer");
 export const filesStore = workspaceStore.select("files");
@@ -58,5 +70,5 @@ export const currentPathStore = viewerStore.select("currentPath");
 export const pendingPathStore = viewerStore.select("pendingPath");
 
 export function resetState(): void {
-	appStore.set(initialState);
+	appStore.set(getInitialState(appStore.get().workspace.lastOpenedPaths));
 }

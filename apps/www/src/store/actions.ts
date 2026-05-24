@@ -99,7 +99,7 @@ function cleanState(
 	};
 }
 
-export async function refreshFiles(): Promise<void> {
+export async function refreshFiles(): Promise<FileEntry[]> {
 	const { backend, workspaceId } = requireCtx();
 	try {
 		const remote = await backend.getFiles(workspaceId);
@@ -111,9 +111,11 @@ export async function refreshFiles(): Promise<void> {
 				updatedAt: f.updatedAt,
 				deleted: f.deleted,
 			}));
-		workspaceStore.set({ files: visible });
+		workspaceStore.set((state) => ({ ...state, files: visible }));
+		return visible;
 	} catch (err) {
 		console.error("refreshFiles failed:", describeError(categorizeError(err)));
+		return [];
 	}
 }
 
@@ -153,6 +155,13 @@ export const loadPath = latest(
 				...cleanState(s, file.content, file.contentHash),
 				currentPath: path,
 				pendingPath: null,
+			}));
+			workspaceStore.set((state) => ({
+				...state,
+				lastOpenedPaths: {
+					...state.lastOpenedPaths,
+					[workspaceId]: path,
+				},
 			}));
 		} catch (err) {
 			if (isStale()) return;

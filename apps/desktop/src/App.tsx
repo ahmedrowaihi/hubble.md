@@ -1,35 +1,20 @@
-import {
-	LinkExtension,
-	listExtensions,
-	MarkdownRolloverExtension,
-	markdownToTiptapDoc,
-	tiptapDocToMarkdown,
-} from "@hubble.md/editor";
+import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { watch } from "@tauri-apps/plugin-fs";
-import { TaskItem } from "@tiptap/extension-list";
-import { EditorContent, type JSONContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { keymatch } from "keymatch";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { createAppMenu } from "./appMenu";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
-import { Button } from "./components/ui/button";
-import { FormattingStatusBar } from "./editor/FormattingStatusBar";
 import { handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
-import { LinkClickExtension } from "./editor/LinkClickExtension";
-import { LinkCreationGhostExtension } from "./editor/LinkCreationGhostExtension";
-import { LinkPopover } from "./editor/LinkPopover";
-import { SmartLinkExtension } from "./editor/SmartLinkExtension";
-import { VirtualCursor } from "./editor/VirtualCursor";
-import type { VirtualCursorMode } from "./editor/virtualCursorMode";
 import { createNote } from "./noteActions";
-import { EDITOR_INPUT_ATTR, SIDEBAR_NAV_SELECTOR } from "./selectors";
+import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	forceKeepLocalEdits,
 	handleExternalFileChange,
@@ -48,7 +33,6 @@ import {
 	workspacePathStore,
 	workspaceStore,
 } from "./store/state";
-import "./editor/prosemirror.css";
 
 // Forces editor refresh when underlying TipTap extensions change
 const HMR_REV = (() => {
@@ -363,8 +347,6 @@ function ExternalChangeBanner({
 	);
 }
 
-const SAVE_DEBOUNCE_MS = 120;
-
 function MarkdownEditor({
 	path,
 	initialMarkdown,
@@ -374,118 +356,54 @@ function MarkdownEditor({
 	initialMarkdown: string;
 	onScrollContainerChange?: (el: HTMLDivElement | null) => void;
 }) {
-	const latestMarkdownRef = useRef(initialMarkdown);
-	const saveTimerRef = useRef<number | null>(null);
-	const editorRootRef = useRef<HTMLDivElement | null>(null);
-	const editorViewportRef = useRef<HTMLDivElement | null>(null);
-	const [editorViewportEl, setEditorViewportEl] =
-		useState<HTMLDivElement | null>(null);
-	const [cursorModeOverride, setCursorModeOverride] =
-		useState<VirtualCursorMode | null>(null);
-	const setEditorViewport = useCallback(
-		(node: HTMLDivElement | null) => {
-			editorViewportRef.current = node;
-			setEditorViewportEl(node);
-			onScrollContainerChange?.(node);
-		},
-		[onScrollContainerChange],
-	);
-	const initialDoc = useMemo(
-		() => markdownToTiptapDoc(initialMarkdown),
-		[initialMarkdown],
-	);
-
-	const editor = useEditor({
-		extensions: [
-			StarterKit.configure({
-				listItem: false,
-			}),
-			LinkExtension,
-			SmartLinkExtension,
-			LinkClickExtension,
-			LinkCreationGhostExtension,
-			MarkdownRolloverExtension,
-			createImageExtension(path),
-			...listExtensions,
-			TaskItem.configure({
-				nested: true,
-			}),
-		],
-		content: initialDoc,
-		onUpdate: ({ editor: currentEditor }) => {
-			const markdown = tiptapDocToMarkdown(
-				currentEditor.getJSON() as JSONContent,
-			);
-			latestMarkdownRef.current = markdown;
-			updateEditorContent(path, markdown);
-
-			if (saveTimerRef.current !== null) {
-				window.clearTimeout(saveTimerRef.current);
-			}
-			saveTimerRef.current = window.setTimeout(() => {
-				void savePathContent(path, latestMarkdownRef.current);
-			}, SAVE_DEBOUNCE_MS);
-		},
-		autofocus: "end",
-		editorProps: {
-			attributes: {
-				class: "min-h-full outline-none",
-				[EDITOR_INPUT_ATTR]: "",
-			},
-			handlePaste: (_view, event): boolean => {
-				const currentEditor = editor;
-				if (!currentEditor) return false;
-				return handleImagePaste({
-					editor: currentEditor,
-					filePath: path,
-					event,
-				});
-			},
-		},
-	});
-
-	useEffect(() => {
-		if (!editor) return;
-		latestMarkdownRef.current = initialMarkdown;
-		const current = tiptapDocToMarkdown(editor.getJSON() as JSONContent);
-		if (current === initialMarkdown) return;
-		editor.commands.setContent(markdownToTiptapDoc(initialMarkdown), {
-			emitUpdate: false,
-		});
-	}, [editor, initialMarkdown]);
-
-	useEffect(() => {
-		return () => {
-			if (saveTimerRef.current !== null) {
-				window.clearTimeout(saveTimerRef.current);
-			}
-			void savePathContent(path, latestMarkdownRef.current);
+	const workspace = useStoreValue(workspaceStore);
+	const wikiTargets: WikiTarget[] = workspace.files.map((file) => {
+		const target = relativeWorkspacePath(file.path, workspace.workspacePath);
+		return {
+			path: file.path,
+			target,
+			title: wikiDisplayNameForTarget(target),
 		};
-	}, [path]);
-
+	});
 	return (
-		<div className="relative flex h-full min-h-0 flex-col" ref={editorRootRef}>
-			<div
-				className="relative min-h-0 flex-1 overflow-auto overscroll-contain"
-				ref={setEditorViewport}
-			>
-				<EditorContent editor={editor} className="h-full" />
-				<VirtualCursor
-					editor={editor}
-					containerRef={editorRootRef}
-					viewportRef={editorViewportRef}
-					modeOverride={cursorModeOverride}
-				/>
-				<LinkPopover
-					editor={editor}
-					containerRef={editorRootRef}
-					viewportRef={editorViewportRef}
-					onCursorModeChange={setCursorModeOverride}
-				/>
-			</div>
-			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
-		</div>
+		<EditorView
+			path={path}
+			initialMarkdown={initialMarkdown}
+			wikiTargets={wikiTargets}
+			extensions={[createImageExtension(path)]}
+			onPaste={(editor, event) =>
+				handleImagePaste({ editor, filePath: path, event })
+			}
+			onLocalChange={updateEditorContent}
+			onSave={savePathContent}
+			onScrollContainerChange={onScrollContainerChange}
+			onOpenExternalLink={openUrl}
+			onOpenWikiLink={(target) => void loadPath(resolveWikiPath(target))}
+			onMessage={(message, kind) =>
+				kind === "success" ? toast.success(message) : toast.error(message)
+			}
+		/>
 	);
+}
+
+function relativeWorkspacePath(path: string, workspacePath: string | null) {
+	if (!workspacePath) return path;
+	const prefix = workspacePath.endsWith("/")
+		? workspacePath
+		: `${workspacePath}/`;
+	return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+}
+
+function resolveWikiPath(target: string) {
+	if (target.startsWith("/")) return target;
+	const workspacePath = workspaceStore.get().workspacePath;
+	return workspacePath ? `${workspacePath}/${target.split("#")[0]}` : target;
+}
+
+function wikiDisplayNameForTarget(target: string) {
+	const withoutHeading = target.split("#")[0] || target;
+	const fileName = withoutHeading.split(/[\\/]/).pop() || withoutHeading;
+	return fileName.replace(/\.(md|markdown|mdown)$/i, "");
 }
 
 export default App;

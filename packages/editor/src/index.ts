@@ -4,6 +4,7 @@ export {
 	getActiveLinkRange,
 	getLinkHrefFromAttrs,
 	LinkExtension,
+	type LinkKind,
 } from "./Link";
 export {
 	ListAutoJoinExtension,

@@ -1,0 +1,128 @@
+.root {
+	position: relative;
+	display: flex;
+	block-size: 100%;
+	min-block-size: 0;
+	flex-direction: column;
+}
+
+.viewport {
+	position: relative;
+	min-block-size: 0;
+	flex: 1 1 auto;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.editorContent {
+	block-size: 100%;
+}
+
+[data-hubble-editor] .ProseMirror {
+	min-block-size: 100%;
+	outline: none;
+	white-space: break-spaces;
+	overflow-wrap: break-word;
+	font-variant-ligatures: none;
+	font-feature-settings: "liga" 0;
+	caret-color: transparent;
+	color: var(--foreground);
+}
+
+[data-hubble-editor] .ProseMirror > * {
+	margin-inline-start: 1rem;
+}
+
+[data-hubble-editor] .ProseMirror > :first-child {
+	padding-block-start: 1rem;
+}
+
+[data-hubble-editor] .ProseMirror h1 {
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+[data-hubble-editor] .ProseMirror h2 {
+	font-size: 1.2rem;
+	font-weight: 600;
+}
+
+[data-hubble-editor] .ProseMirror h3 {
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+[data-hubble-editor] .ProseMirror ul {
+	list-style-type: disc;
+}
+
+[data-hubble-editor] .ProseMirror ol {
+	list-style-type: decimal;
+}
+
+[data-hubble-editor] .ProseMirror :is(ul, ol) li {
+	margin-inline-start: 1.3rem;
+}
+
+[data-hubble-editor] .ProseMirror ul > li[data-checked] {
+	list-style-type: none;
+	margin-inline-start: 0;
+	align-items: flex-start;
+	display: flex;
+}
+
+[data-hubble-editor] .ProseMirror ul > li[data-checked] > label {
+	flex: 0 0 auto;
+	margin-inline-end: 0.55rem;
+	user-select: none;
+}
+
+[data-hubble-editor] .ProseMirror ul > li[data-checked] > div {
+	flex: 1 1 auto;
+}
+
+[data-hubble-editor] .ProseMirror blockquote {
+	margin-inline-start: calc(1rem - 2px);
+	border-inline-start: 2px solid var(--border);
+	border-radius: 1px;
+	padding-inline-start: 1rem;
+	color: color-mix(in oklab, var(--foreground) 78%, white);
+}
+
+[data-hubble-editor] .pm-fake-selection {
+	background: color-mix(in oklab, var(--brand) 34%, transparent);
+	border-radius: 2px;
+}
+
+[data-hubble-editor] .pm-md-delimiter {
+	color: var(--muted-foreground);
+	opacity: 0.7;
+	user-select: none;
+	pointer-events: auto;
+	position: relative;
+	cursor: text;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+}
+
+[data-hubble-editor] .ProseMirror span[data-link="true"] {
+	color: color-mix(in oklab, var(--brand) 48%, var(--foreground));
+	text-decoration: underline;
+}
+
+[data-hubble-editor] .ProseMirror.mod-held span[data-link="true"] {
+	cursor: pointer;
+}
+
+[data-hubble-editor] .pm-ghost-text {
+	opacity: 0.35;
+	user-select: none;
+	pointer-events: none;
+}
+
+[data-hubble-editor] .ProseMirror img {
+	display: block;
+	max-inline-size: min(100%, 900px);
+	block-size: auto;
+}

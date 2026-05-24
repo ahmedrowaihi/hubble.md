@@ -58,7 +58,7 @@ function hydrateWorkspace(ws: Persisted["workspace"]): WorkspaceState {
 			!Array.isArray(ws.lastOpenedPaths)
 				? ws.lastOpenedPaths
 				: {},
-		sortMode: ws?.sortMode === "recent" ? "recent" : "alpha",
+		sortMode: ws?.sortMode === "alpha" ? "alpha" : "recent",
 		files: [],
 	};
 }
