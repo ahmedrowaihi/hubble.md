@@ -40,14 +40,6 @@ const HMR_REV = (() => {
 function focusSidebarNav() {
 	document.querySelector<HTMLElement>(SIDEBAR_NAV_SELECTOR)?.focus();
 }
-function getParentPath(path: string) {
-	const forwardSlash = path.lastIndexOf("/");
-	const backSlash = path.lastIndexOf("\\");
-	const separatorIndex = Math.max(forwardSlash, backSlash);
-	if (separatorIndex < 0) return null;
-	if (separatorIndex === 0) return path.slice(0, 1);
-	return path.slice(0, separatorIndex);
-}
 
 function App() {
 	const state = useStoreValue(viewerStore);
@@ -95,8 +87,7 @@ function App() {
 
 	useEffect(() => {
 		const currentPath = state.currentPath;
-		const parentPath = currentPath ? getParentPath(currentPath) : null;
-		if (!currentPath || !parentPath) return;
+		if (!currentPath) return;
 
 		let disposed = false;
 		let unwatch: null | (() => void) = null;
@@ -113,7 +104,7 @@ function App() {
 
 		const setup = async () => {
 			unwatch = await desktopApi.watchPath(
-				parentPath,
+				currentPath,
 				{ recursive: false },
 				(paths) => void handleChange(paths),
 			);
