@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
+import { shouldShowFooterDivider } from "../lib/scrollOverflow";
 import { cn } from "../lib/utils";
 import { Button } from "../primitives/button";
 import { useSidebarKeyboardNav } from "./useSidebarKeyboardNav";
@@ -43,7 +44,6 @@ export function Sidebar({
 		if (sortMode === "recent") return (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0);
 		return a.path.localeCompare(b.path);
 	});
-
 	const selectFile = useCallback(
 		(file: SidebarFile) => onSelectFile(file.path),
 		[onSelectFile],
@@ -61,32 +61,37 @@ export function Sidebar({
 		setFocusedIndex(0);
 	}, [focusedIndex, highlightPath, sorted.length, setFocusedIndex]);
 
-	useEffect(() => {
+	const updateFooterDivider = useCallback(() => {
 		const nav = navRef.current;
 		if (!nav || !footer) {
 			setShowFooterDivider(false);
 			return;
 		}
+		setShowFooterDivider(shouldShowFooterDivider(nav));
+	}, [footer]);
 
-		const update = () => {
-			const maxScrollTop = Math.max(nav.scrollHeight - nav.clientHeight, 0);
-			const hasMeaningfulOverflow = maxScrollTop > 8;
-			const isAtBottom = maxScrollTop - nav.scrollTop <= 2;
-			setShowFooterDivider(hasMeaningfulOverflow && !isAtBottom);
-		};
+	useEffect(() => {
+		const nav = navRef.current;
+		if (!nav || !footer) {
+			updateFooterDivider();
+			return;
+		}
 
-		update();
-		requestAnimationFrame(update);
-		const resizeObserver = new ResizeObserver(update);
+		updateFooterDivider();
+		requestAnimationFrame(updateFooterDivider);
+		const resizeObserver = new ResizeObserver(updateFooterDivider);
+		const mutationObserver = new MutationObserver(updateFooterDivider);
 		resizeObserver.observe(nav);
-		nav.addEventListener("scroll", update, { passive: true });
-		window.addEventListener("resize", update);
+		mutationObserver.observe(nav, { childList: true, subtree: true });
+		nav.addEventListener("scroll", updateFooterDivider, { passive: true });
+		window.addEventListener("resize", updateFooterDivider);
 		return () => {
 			resizeObserver.disconnect();
-			nav.removeEventListener("scroll", update);
-			window.removeEventListener("resize", update);
+			mutationObserver.disconnect();
+			nav.removeEventListener("scroll", updateFooterDivider);
+			window.removeEventListener("resize", updateFooterDivider);
 		};
-	}, [footer]);
+	}, [footer, updateFooterDivider]);
 
 	const footerDividerClass = showFooterDivider
 		? "[border-block-start:1px_dashed_var(--border)]"
