@@ -18,7 +18,10 @@ import {
 } from "electron";
 import electronUpdater from "electron-updater";
 import ignore from "ignore";
-import type { DesktopUpdateState } from "../src/desktopApi/types";
+import type {
+	DesktopUpdateState,
+	WorkspaceConfig,
+} from "../src/desktopApi/types";
 
 type FileEntry = {
 	path: string;
@@ -93,6 +96,9 @@ let grantsLoaded = false;
 
 const ignoreConfigFiles = [".gitignore", ".ignore"];
 const ignoredWorkspaceDirs = new Set([".git", "dist", "node_modules"]);
+const workspaceConfigVersion = 1;
+const workspaceConfigDir = ".hubble";
+const workspaceConfigFile = "config.json";
 const iframeHeadStyles = [
 	{ name: "hubble-theme", source: embedTheme },
 ] as const;
@@ -107,6 +113,50 @@ const iframeBodyEndScripts = [
 
 function grantsPath(): string {
 	return path.join(app.getPath("userData"), "grants.json");
+}
+
+function workspaceConfigPath(workspacePath: string): string {
+	const root = assertGrantedRoot(workspacePath);
+	return path.join(root, workspaceConfigDir, workspaceConfigFile);
+}
+
+function emptyWorkspaceConfig(): WorkspaceConfig {
+	return { version: workspaceConfigVersion, pinnedNotes: [] };
+}
+
+function isValidConfigNote(note: unknown): note is string {
+	return (
+		typeof note === "string" &&
+		note.length > 0 &&
+		!path.isAbsolute(note) &&
+		!note.split("/").includes("..")
+	);
+}
+
+function parseWorkspaceConfig(raw: string): WorkspaceConfig {
+	try {
+		const parsed = JSON.parse(raw) as {
+			version?: unknown;
+			pinnedNotes?: unknown;
+		};
+		if (parsed.version !== workspaceConfigVersion)
+			return emptyWorkspaceConfig();
+		if (!Array.isArray(parsed.pinnedNotes)) return emptyWorkspaceConfig();
+		const pinnedNotes = parsed.pinnedNotes.filter(isValidConfigNote);
+		return { version: workspaceConfigVersion, pinnedNotes };
+	} catch {
+		return emptyWorkspaceConfig();
+	}
+}
+
+function normalizeWorkspaceConfig(input: WorkspaceConfig): WorkspaceConfig {
+	const pinnedNotes = Array.isArray(input.pinnedNotes)
+		? input.pinnedNotes.filter(isValidConfigNote)
+		: [];
+	return {
+		version: workspaceConfigVersion,
+		pinnedNotes: [...new Set(pinnedNotes)],
+	};
 }
 
 async function loadGrants() {
@@ -746,6 +796,40 @@ function registerIpc() {
 			const files: EmbedFileEntry[] = [];
 			await collectWorkspaceFiles(root, root, String(glob ?? "**/*"), files);
 			return files.sort((a, b) => a.path.localeCompare(b.path));
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:read-workspace-config",
+		async (_event, { workspacePath }) => {
+			try {
+				return parseWorkspaceConfig(
+					await fs.readFile(workspaceConfigPath(workspacePath), "utf8"),
+				);
+			} catch (err) {
+				if (
+					err &&
+					typeof err === "object" &&
+					"code" in err &&
+					err.code === "ENOENT"
+				) {
+					return emptyWorkspaceConfig();
+				}
+				throw err;
+			}
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:write-workspace-config",
+		async (_event, { workspacePath, config }) => {
+			const configPath = workspaceConfigPath(workspacePath);
+			await fs.mkdir(path.dirname(configPath), { recursive: true });
+			await fs.writeFile(
+				configPath,
+				`${JSON.stringify(normalizeWorkspaceConfig(config), null, 2)}\n`,
+			);
+			grantFile(configPath);
 		},
 	);
 
