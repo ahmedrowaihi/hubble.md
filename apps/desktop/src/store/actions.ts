@@ -40,6 +40,12 @@ export async function refreshFiles(path = workspaceStore.get().workspacePath) {
 	});
 }
 
+/**
+ * Debounced wrapper for event-driven sidebar refreshes.
+ *
+ * Keep `refreshFiles()` immediate for user actions that await a fresh snapshot.
+ * Prefer debounced for refreshes triggered by effects.
+ */
 export function refreshFilesDebounced(
 	path = workspaceStore.get().workspacePath,
 ) {
