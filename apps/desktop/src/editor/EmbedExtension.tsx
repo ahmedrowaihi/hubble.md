@@ -1,9 +1,5 @@
 import { Node } from "@tiptap/core";
-import {
-	NodeViewWrapper,
-	type ReactNodeViewProps,
-	ReactNodeViewRenderer,
-} from "@tiptap/react";
+import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { desktopApi } from "../desktopApi";
 import "./EmbedExtension.css";
@@ -52,25 +48,14 @@ export function createEmbedExtension(options: EmbedExtensionOptions) {
 
 		addNodeView() {
 			return ReactNodeViewRenderer((props) => (
-				<EmbedNodeView {...props} options={options} />
+				<IframeEmbedNodeView
+					attrs={props.node.attrs as EmbedAttrs}
+					filePath={options.filePath}
+					workspacePath={options.workspacePath}
+				/>
 			));
 		},
 	});
-}
-
-function EmbedNodeView({
-	node,
-	options,
-}: ReactNodeViewProps & { options: EmbedExtensionOptions }) {
-	const attrs = node.attrs as EmbedAttrs;
-
-	return (
-		<IframeEmbedNodeView
-			attrs={attrs}
-			filePath={options.filePath}
-			workspacePath={options.workspacePath}
-		/>
-	);
 }
 
 function IframeEmbedNodeView({
