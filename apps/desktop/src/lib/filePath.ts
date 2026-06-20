@@ -9,8 +9,12 @@ export function dirname(filePath: string): string | null {
 	return filePath.slice(0, separatorIndex);
 }
 
+export function basename(filePath: string): string {
+	return filePath.split(/[\\/]/).pop() ?? filePath;
+}
+
 export function extname(filePath: string): string {
-	const name = filePath.split(/[\\/]/).pop() ?? filePath;
+	const name = basename(filePath);
 	const dot = name.lastIndexOf(".");
 	return dot > 0 ? name.slice(dot) : "";
 }
@@ -30,10 +34,63 @@ export function joinPath(parent: string, name: string): string {
 		: `${parent}${separator}${name}`;
 }
 
+export function normalizePath(path: string): string {
+	const normalized = path.replace(/\\/g, "/");
+	const isAbsolute = normalized.startsWith("/");
+	const parts: string[] = [];
+	for (const part of normalized.split("/")) {
+		if (!part || part === ".") continue;
+		if (part === "..") {
+			if (parts.length > 0 && parts[parts.length - 1] !== "..") parts.pop();
+			else if (!isAbsolute) parts.push(part);
+			continue;
+		}
+		parts.push(part);
+	}
+	return `${isAbsolute ? "/" : ""}${parts.join("/")}`;
+}
+
+export function pathEquals(a: string, b: string): boolean {
+	return a.toLocaleLowerCase() === b.toLocaleLowerCase();
+}
+
 export function pathInFolder(path: string, folderPath: string): boolean {
 	const prefix =
 		folderPath.endsWith("/") || folderPath.endsWith("\\")
 			? folderPath
 			: `${folderPath}/`;
 	return path.startsWith(prefix);
+}
+
+export function replacePathPrefix(
+	path: string,
+	fromPath: string,
+	toPath: string,
+) {
+	if (pathEquals(path, fromPath)) return toPath;
+	if (!pathInFolder(path, fromPath)) return path;
+	return joinPath(
+		toPath,
+		path.slice(fromPath.replace(/[\\/]+$/, "").length + 1),
+	);
+}
+
+export function absoluteWorkspacePath(
+	relativePath: string,
+	workspacePath: string,
+) {
+	return workspacePath.endsWith("/")
+		? `${workspacePath}${relativePath}`
+		: `${workspacePath}/${relativePath}`;
+}
+
+export function relativeWorkspacePath(
+	path: string,
+	workspacePath: string | null,
+) {
+	if (!workspacePath) return path;
+	const prefix = workspacePath.endsWith("/")
+		? workspacePath
+		: `${workspacePath}/`;
+	return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }

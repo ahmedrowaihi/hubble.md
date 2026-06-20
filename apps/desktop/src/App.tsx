@@ -17,6 +17,7 @@ import { createEmbedExtension } from "./editor/EmbedExtension";
 import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
 import { createMarkdownFile } from "./fileActions";
+import { relativeWorkspacePath } from "./lib/filePath";
 import { resolveWikiPath } from "./lib/wikiPath";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
@@ -431,14 +432,6 @@ function MarkdownEditor({
 			}
 		/>
 	);
-}
-
-function relativeWorkspacePath(path: string, workspacePath: string | null) {
-	if (!workspacePath) return path;
-	const prefix = workspacePath.endsWith("/")
-		? workspacePath
-		: `${workspacePath}/`;
-	return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 export default App;

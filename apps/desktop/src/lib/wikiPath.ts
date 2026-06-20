@@ -3,15 +3,7 @@ import {
 	withMarkdownExtension,
 } from "@hubble.md/editor";
 import type { FileEntry } from "../store/state";
-import { joinPath } from "./filePath";
-
-function relativeWorkspacePath(path: string, workspacePath: string | null) {
-	if (!workspacePath) return path;
-	const prefix = workspacePath.endsWith("/")
-		? workspacePath
-		: `${workspacePath}/`;
-	return path.startsWith(prefix) ? path.slice(prefix.length) : path;
-}
+import { joinPath, relativeWorkspacePath } from "./filePath";
 
 export function resolveWikiPath({
 	target,

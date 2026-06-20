@@ -289,6 +289,7 @@ export function Sidebar({
 					row.segments.some((segment) => segment.id === dropTarget.folderId)),
 		);
 		if (!targetRow) return;
+		// Let users hover a collapsed folder while dragging to reveal nested targets.
 		const timer = window.setTimeout(() => {
 			expandFolder(targetRow.id);
 		}, DRAG_EXPAND_DELAY_MS);
