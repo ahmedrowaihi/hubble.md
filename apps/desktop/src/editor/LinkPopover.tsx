@@ -5,7 +5,10 @@ import {
 	shift,
 	type VirtualElement,
 } from "@floating-ui/dom";
-import { getActiveLinkRange } from "@hubble.md/editor";
+import {
+	getActiveLinkRange,
+	wikiDisplayNameForTarget,
+} from "@hubble.md/editor";
 import { useStoreValue } from "@simplestack/store/react";
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -24,9 +27,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import MingcuteArrowRightLine from "~icons/mingcute/arrow-right-line";
+import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
+import MingcuteDelete2Line from "~icons/mingcute/delete-2-line";
 import MingcutePencilFill from "~icons/mingcute/pencil-fill";
 import { desktopApi } from "../desktopApi";
 import { cn } from "../lib/utils";
+import { resolveWikiPath as resolveWorkspaceWikiPath } from "../lib/wikiPath";
 import { loadPath } from "../store/actions";
 import { workspaceStore } from "../store/state";
 import { linkCreationGhostKey } from "./LinkCreationGhostExtension";
@@ -220,6 +228,14 @@ async function copyLinkToClipboard(href: string) {
 	}
 }
 
+function linkClipboardText(link: ActiveLink) {
+	return link.kind === "wiki" ? (link.target ?? link.href) : link.href;
+}
+
+function linkPreviewText(href: string) {
+	return href.replace(/^https?:\/\//i, "");
+}
+
 function removeActiveLink(editor: Editor, from: number, to: number) {
 	const linkType = editor.state.schema.marks.link;
 	if (!linkType) return;
@@ -302,6 +318,28 @@ function isHttpUrl(href: string) {
 		return false;
 	}
 }
+function updateLinkMark(editor: Editor, link: ActiveLink, href: string) {
+	const linkType = editor.state.schema.marks.link;
+	if (!linkType) return;
+	const attrs = isHttpUrl(href)
+		? { href, kind: "url", target: null }
+		: { href, kind: "wiki", target: href };
+	if (link.from === link.to) {
+		// Zero-width links edit stored marks because there is no text range yet.
+		const marks = (
+			editor.state.storedMarks ?? editor.state.selection.$from.marks()
+		).filter((mark) => mark.type !== linkType);
+		const tr = editor.state.tr.setStoredMarks([
+			...marks,
+			linkType.create(attrs),
+		]);
+		editor.view.dispatch(tr);
+		return;
+	}
+	const tr = editor.state.tr.removeMark(link.from, link.to, linkType);
+	tr.addMark(link.from, link.to, linkType.create(attrs));
+	editor.view.dispatch(tr);
+}
 
 async function visitActiveLink(link: { href: string; kind: "url" | "wiki" }) {
 	if (link.kind === "wiki") {
@@ -312,9 +350,12 @@ async function visitActiveLink(link: { href: string; kind: "url" | "wiki" }) {
 }
 
 function resolveWikiPath(href: string) {
-	if (href.startsWith("/")) return href;
-	const workspacePath = workspaceStore.get().workspacePath;
-	return workspacePath ? `${workspacePath}/${href}` : href;
+	const workspace = workspaceStore.get();
+	return resolveWorkspaceWikiPath({
+		target: href,
+		files: workspace.files,
+		workspacePath: workspace.workspacePath,
+	});
 }
 
 function relativeWorkspacePath(path: string, workspacePath: string | null) {
@@ -323,12 +364,6 @@ function relativeWorkspacePath(path: string, workspacePath: string | null) {
 		? workspacePath
 		: `${workspacePath}/`;
 	return path.startsWith(prefix) ? path.slice(prefix.length) : path;
-}
-
-function wikiDisplayNameForTarget(target: string) {
-	const withoutHeading = target.split("#")[0] || target;
-	const fileName = withoutHeading.split(/[\\/]/).pop() || withoutHeading;
-	return fileName.replace(/\.(md|markdown|mdown)$/i, "");
 }
 
 function normalizedSearchValue(value: string) {
@@ -430,7 +465,7 @@ function updateFloatingPosition(
 	});
 }
 
-function playPreviewRevealAnimation(previewButton: HTMLButtonElement) {
+function playPreviewRevealAnimation(previewButton: HTMLDivElement) {
 	const easing =
 		getComputedStyle(previewButton).getPropertyValue("--ease-snappy").trim() ||
 		"ease-out";
@@ -467,7 +502,7 @@ function usePreviewRevealAnimation({
 		((reason?: PositionUpdateReason) => void) | null
 	>;
 }) {
-	const previewButtonRef = useRef<HTMLButtonElement | null>(null);
+	const previewButtonRef = useRef<HTMLDivElement | null>(null);
 	const previewRevealAnimationRef = useRef<Animation | null>(null);
 	const previousPopoverModeRef = useRef<PopoverMode>(mode);
 	const previousPreviewKeyRef = useRef<string | null>(activeKey);
@@ -530,6 +565,45 @@ function usePreviewRevealAnimation({
 	return previewButtonRef;
 }
 
+function PreviewLabel({ text }: { text: string }) {
+	const textRef = useRef<HTMLSpanElement | null>(null);
+	const [overflows, setOverflows] = useState(false);
+
+	const measureOverflow = useCallback(() => {
+		const element = textRef.current;
+		setOverflows(
+			Boolean(element && element.scrollWidth > element.clientWidth + 1),
+		);
+	}, []);
+
+	useLayoutEffect(() => {
+		const element = textRef.current;
+		if (!element) {
+			setOverflows(false);
+			return;
+		}
+		measureOverflow();
+		// CSS cannot tell us whether the text is actually clipped. Measure overflow
+		// so the fade mask only appears when there is hidden text to fade out.
+		// Hover padding and reveal animation also change the available label width.
+		const observer = new ResizeObserver(measureOverflow);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [measureOverflow]);
+
+	return (
+		<span
+			ref={textRef}
+			className={cn(
+				"block min-w-0 flex-1 overflow-hidden whitespace-nowrap",
+				overflows && styles.previewText,
+			)}
+		>
+			{text}
+		</span>
+	);
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 export function LinkPopover({
@@ -560,6 +634,7 @@ export function LinkPopover({
 	const machineStateRef = useRef(machineState);
 	const anchorRef = useRef(INITIAL_LINK_ANCHOR_STATE);
 	const lastSelectionActiveKeyRef = useRef<string | null>(null);
+	const expandNextLinkSessionRef = useRef(false);
 	const originalWikiTargetRef = useRef<{
 		activeKey: string;
 		target: string;
@@ -648,6 +723,12 @@ export function LinkPopover({
 			const linkType = editor.state.schema.marks.link;
 			if (!linkType) return;
 
+			const nextLink = {
+				...activeLink,
+				href: suggestion.path,
+				kind: "wiki" as const,
+				target: suggestion.target,
+			};
 			const attrs = {
 				href: suggestion.path,
 				kind: "wiki",
@@ -660,39 +741,41 @@ export function LinkPopover({
 				editor.view.dispatch(
 					editor.state.tr.setStoredMarks([...marks, linkType.create(attrs)]),
 				);
-				setHrefValue(suggestion.target);
-				dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
-				return;
-			}
-
-			const currentText = editor.state.doc.textBetween(
-				activeLink.from,
-				activeLink.to,
-				"",
-			);
-			// Update inline text only when it still matches the linked file name.
-			const oldTarget =
-				originalWikiTargetRef.current?.activeKey ===
-				machineStateRef.current.activeKey
-					? originalWikiTargetRef.current.target
-					: activeLink.target || activeLink.href;
-			const oldAutoTitle = wikiDisplayNameForTarget(oldTarget);
-			if (currentText === oldAutoTitle) {
-				const tr = editor.state.tr.replaceWith(
-					activeLink.from,
-					activeLink.to,
-					editor.state.schema.text(suggestion.title, [linkType.create(attrs)]),
-				);
-				editor.view.dispatch(tr);
 			} else {
-				const tr = editor.state.tr.removeMark(
+				const currentText = editor.state.doc.textBetween(
 					activeLink.from,
 					activeLink.to,
-					linkType,
+					"",
 				);
-				tr.addMark(activeLink.from, activeLink.to, linkType.create(attrs));
-				editor.view.dispatch(tr);
+				// Update inline text only when it still matches the linked file name.
+				const oldTarget =
+					originalWikiTargetRef.current?.activeKey ===
+					machineStateRef.current.activeKey
+						? originalWikiTargetRef.current.target
+						: activeLink.target || activeLink.href;
+				const oldAutoTitle = wikiDisplayNameForTarget(oldTarget);
+				if (currentText === oldAutoTitle) {
+					const tr = editor.state.tr.replaceWith(
+						activeLink.from,
+						activeLink.to,
+						editor.state.schema.text(suggestion.title, [
+							linkType.create(attrs),
+						]),
+					);
+					editor.view.dispatch(tr);
+				} else {
+					const tr = editor.state.tr.removeMark(
+						activeLink.from,
+						activeLink.to,
+						linkType,
+					);
+					tr.addMark(activeLink.from, activeLink.to, linkType.create(attrs));
+					editor.view.dispatch(tr);
+				}
 			}
+			// Edits can close before selection sync runs, so keep preview/open state
+			// aligned with the transaction we just dispatched.
+			setActiveLink(nextLink);
 			setHrefValue(suggestion.target);
 			dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
 		},
@@ -756,6 +839,10 @@ export function LinkPopover({
 				type: "LINK_SESSION_CHANGED",
 				activeKey,
 			});
+			if (expandNextLinkSessionRef.current && activeKey) {
+				expandNextLinkSessionRef.current = false;
+				dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
+			}
 
 			const viewport = viewportRef.current;
 			const floatingEl = popoverRef.current;
@@ -843,7 +930,26 @@ export function LinkPopover({
 	// ── Listen for FOCUS_LINK_POPOVER_EVENT (selection-based flow) ──
 	useEffect(() => {
 		const onFocusRequest = () => {
+			expandNextLinkSessionRef.current = true;
 			dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
+			// SmartLinkExtension fires this right after dispatching a transaction
+			// that may create an empty link. Read the session after that state lands.
+			queueMicrotask(() => {
+				if (!editor) return;
+				const { link } = getLinkSession(editor);
+				if (!link || link.href) return;
+				void navigator.clipboard
+					.readText()
+					.then((clipboardValue) => {
+						const href = clipboardValue.trim();
+						if (!isHttpUrl(href)) return;
+						updateLinkMark(editor, link, href);
+						setHrefValue(href);
+						setActiveLink({ ...link, href, kind: "url", target: null });
+						dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
+					})
+					.catch(() => {});
+			});
 		};
 		window.addEventListener(
 			FOCUS_LINK_POPOVER_EVENT,
@@ -855,7 +961,7 @@ export function LinkPopover({
 				onFocusRequest as EventListener,
 			);
 		};
-	}, [dispatchMachineEvent]);
+	}, [editor, dispatchMachineEvent]);
 
 	// ── Listen for LINK_CREATION_REQUESTED_EVENT (empty-selection Cmd+K) ──
 	useEffect(() => {
@@ -1093,20 +1199,10 @@ export function LinkPopover({
 				dispatchMachineEvent({ type: "TOGGLE_ACTIONS_REQUESTED" });
 				return;
 			}
-			if (isVisible && keymatch(event, "CmdOrCtrl+Enter")) {
-				event.preventDefault();
-				event.stopPropagation();
-				void visitActiveLink(activeLink);
-				return;
-			}
 			if (isVisible && keymatch(event, "CmdOrCtrl+Shift+C")) {
 				event.preventDefault();
 				event.stopPropagation();
-				void copyLinkToClipboard(
-					activeLink.kind === "wiki"
-						? (activeLink.target ?? activeLink.href)
-						: activeLink.href,
-				);
+				void copyLinkToClipboard(linkClipboardText(activeLink));
 				return;
 			}
 		};
@@ -1126,6 +1222,18 @@ export function LinkPopover({
 		boundedActiveSuggestionIndex,
 	]);
 
+	const activeLinkTarget =
+		activeLink?.kind === "wiki" ? (activeLink.target ?? activeLink.href) : null;
+	const previewText = activeLink
+		? activeLink.kind === "wiki"
+			? wikiDisplayNameForTarget(activeLinkTarget ?? activeLink.href)
+			: linkPreviewText(activeLink.href)
+		: linkPreviewText(creationHref);
+	const previewTitle = activeLink
+		? activeLink.kind === "wiki"
+			? (activeLinkTarget ?? activeLink.href)
+			: activeLink.href
+		: creationHref;
 	// ── Early return: nothing visible ───────────────────────────────
 	if (!editor) return null;
 	if (machineState.mode === "creating") {
@@ -1140,49 +1248,12 @@ export function LinkPopover({
 	const handleExistingLinkInput = (href: string) => {
 		if (!activeLink) return;
 		setHrefValue(href);
-		const linkType = editor.state.schema.marks.link;
-		if (!linkType) return;
-		const attrs = isHttpUrl(href)
-			? { href, kind: "url", target: null }
-			: { href, kind: "wiki", target: href };
-		if (activeLink.from === activeLink.to) {
-			// Zero-width links edit stored marks because there is no text range yet.
-			const marks = (
-				editor.state.storedMarks ?? editor.state.selection.$from.marks()
-			).filter((mark) => mark.type !== linkType);
-			const tr = editor.state.tr.setStoredMarks([
-				...marks,
-				linkType.create(attrs),
-			]);
-			editor.view.dispatch(tr);
-			return;
-		}
-		const tr = editor.state.tr.removeMark(
-			activeLink.from,
-			activeLink.to,
-			linkType,
-		);
-		tr.addMark(activeLink.from, activeLink.to, linkType.create(attrs));
-		editor.view.dispatch(tr);
+		updateLinkMark(editor, activeLink, href);
 	};
 
 	// ── Render ──────────────────────────────────────────────────────
-	const actionHintClass =
-		"text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85";
 	const actionButtonClass =
-		"h-auto flex-1 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted";
-	const activeLinkTarget =
-		activeLink?.kind === "wiki" ? (activeLink.target ?? activeLink.href) : null;
-	const previewText = activeLink
-		? activeLink.kind === "wiki"
-			? wikiDisplayNameForTarget(activeLinkTarget ?? activeLink.href)
-			: activeLink.href
-		: creationHref;
-	const previewTitle = activeLink
-		? activeLink.kind === "wiki"
-			? (activeLinkTarget ?? activeLink.href)
-			: activeLink.href
-		: creationHref;
+		"h-auto flex-1 justify-center gap-1.5 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted [&_svg]:size-3";
 	const suggestionList =
 		wikiSuggestions.length > 0 ? (
 			<div
@@ -1249,48 +1320,67 @@ export function LinkPopover({
 				</div>
 			) : machineState.mode === "preview" ? (
 				<div className="flex justify-center">
-					<Button
+					<div
 						ref={previewButtonRef}
-						variant="outline"
-						size="sm"
 						className={cn(
-							"h-7 min-w-0 justify-start gap-0 overflow-hidden border-border bg-card px-0 text-left hover:bg-muted",
+							"group flex h-7 min-w-0 overflow-hidden rounded-[var(--radius-popover)] border border-border bg-card shadow-xs",
 							styles.previewButton,
 						)}
-						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 					>
-						<span
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
 							title={previewTitle}
-							className="min-w-0 flex-1 overflow-hidden px-2.5 py-[5px] pr-3 text-[11px] leading-[16px] text-foreground whitespace-nowrap [mask-image:linear-gradient(to_right,black_84%,transparent)] [-webkit-mask-image:linear-gradient(to_right,black_84%,transparent)]"
+							className="group/preview-label relative h-full min-w-0 flex-1 justify-start rounded-none border-0 py-[5px] ps-2 pe-0 text-left text-[11px] leading-[16px] text-foreground shadow-none inset-shadow-none transition-[padding] duration-[var(--default-transition-duration)] ease-snappy hover:bg-muted group-hover/preview-label:pe-8"
+							onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 						>
-							{previewText}
-						</span>
-						<span className="relative flex h-full w-[42px] shrink-0 items-center justify-center overflow-hidden border-s border-border bg-primary text-primary-foreground">
+							<PreviewLabel key={previewText} text={previewText} />
 							<span
-								className={cn(
-									"absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-[var(--default-transition-duration)] ease-snappy",
-									inputMode === "keyboard"
-										? "translate-y-0"
-										: "-translate-y-[120%]",
-								)}
-							>
-								⌘K
-							</span>
-							<span
-								className={cn(
-									"absolute inset-0 flex items-center justify-center transition-transform duration-[var(--default-transition-duration)] ease-snappy",
-									inputMode === "keyboard"
-										? "translate-y-[120%]"
-										: "translate-y-0",
-								)}
+								aria-hidden="true"
+								className="pointer-events-none absolute inset-block-0 end-0 z-20 flex w-8 items-center justify-center bg-linear-to-l from-card via-card/95 to-transparent text-muted-foreground opacity-0 transition-opacity duration-[var(--default-transition-duration)] ease-snappy group-hover/preview-label:from-muted group-hover/preview-label:via-muted/95 group-hover/preview-label:opacity-100"
 							>
 								<MingcutePencilFill
-									aria-label="Edit link"
-									className="h-3 w-3"
+									aria-hidden="true"
+									className="h-3 w-3 shrink-0"
 								/>
 							</span>
-						</span>
-					</Button>
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							aria-label="Copy link"
+							title="Copy link (Cmd/Ctrl+Shift+C)"
+							className="relative z-20 flex h-full w-7 shrink-0 items-center justify-center border-0 bg-card p-0 text-muted-foreground transition-colors duration-[var(--default-transition-duration)] ease-snappy hover:bg-muted hover:text-foreground"
+							onClick={() => {
+								if (!activeLink) return;
+								void copyLinkToClipboard(linkClipboardText(activeLink));
+							}}
+						>
+							<MingcuteCopy2Line aria-hidden="true" className="size-3" />
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							aria-label="Open link"
+							className="h-full w-9 shrink-0 rounded-none border-0 bg-primary px-0 text-primary-foreground shadow-none inset-shadow-none hover:bg-primary/90 hover:text-primary-foreground"
+							onClick={() => {
+								if (!activeLink) return;
+								void visitActiveLink(activeLink);
+							}}
+						>
+							{activeLink?.kind === "wiki" ? (
+								<MingcuteArrowRightLine
+									aria-hidden="true"
+									className="size-3.5"
+								/>
+							) : (
+								<span aria-hidden="true">↗</span>
+							)}
+						</Button>
+					</div>
 				</div>
 			) : (
 				<div className="w-full overflow-hidden rounded-[var(--radius-popover)] border border-border bg-popover shadow-overlay">
@@ -1319,7 +1409,10 @@ export function LinkPopover({
 								if (!activeLink) return;
 								removeActiveLink(editor, activeLink.from, activeLink.to);
 							}}
+							aria-label="Remove link"
+							title="Remove link"
 						>
+							<MingcuteDelete2Line aria-hidden="true" />
 							<span>Remove</span>
 						</Button>
 						<Separator
@@ -1333,15 +1426,13 @@ export function LinkPopover({
 							className={actionButtonClass}
 							onClick={() => {
 								if (!activeLink) return;
-								void copyLinkToClipboard(
-									activeLink.kind === "wiki"
-										? (activeLink.target ?? activeLink.href)
-										: activeLink.href,
-								);
+								void copyLinkToClipboard(linkClipboardText(activeLink));
 							}}
+							aria-label="Copy link"
+							title="Copy link (Cmd/Ctrl+Shift+C)"
 						>
+							<MingcuteCopy2Line aria-hidden="true" />
 							<span>Copy</span>
-							<span className={actionHintClass}>⌘⇧C</span>
 						</Button>
 						<Separator
 							orientation="vertical"
@@ -1351,16 +1442,15 @@ export function LinkPopover({
 							type="button"
 							variant="default"
 							size="xs"
-							className="h-auto min-w-[72px] rounded-none border-0 px-2 text-primary-foreground shadow-none inset-shadow-none hover:brightness-105"
+							className="h-auto flex-1 justify-center gap-1.5 rounded-none border-0 px-2 text-primary-foreground shadow-none inset-shadow-none hover:brightness-105"
 							onClick={() => {
-								if (!activeLink) return;
-								void visitActiveLink(activeLink);
+								dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
 							}}
+							aria-label="Done"
+							title="Done"
 						>
-							<span>Visit</span>
-							<span className="text-[9px] leading-[14px] tracking-[0.12em] text-primary-foreground/75">
-								⌘↩
-							</span>
+							<MingcuteCheckLine aria-hidden="true" className="size-3" />
+							<span>Done</span>
 						</Button>
 					</div>
 				</div>

@@ -23,6 +23,10 @@ import type {
 	DesktopUpdateState,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
+import {
+	hasMarkdownExtension,
+	withMarkdownExtension,
+} from "../src/lib/filePath";
 
 type FileEntry = {
 	path: string;
@@ -262,7 +266,7 @@ function isIgnoredByRules(candidatePath: string, rules: IgnoreRule[]) {
 }
 
 function isMarkdownPath(candidatePath: string): boolean {
-	return /\.(md|markdown|mdown)$/i.test(candidatePath);
+	return hasMarkdownExtension(candidatePath);
 }
 
 function isMissingPathError(error: unknown): boolean {
@@ -956,9 +960,7 @@ function registerIpc() {
 				filters: [{ name: "Markdown", extensions: ["md"] }],
 			});
 			if (result.canceled || !result.filePath) return null;
-			const selected = result.filePath.endsWith(".md")
-				? result.filePath
-				: `${result.filePath}.md`;
+			const selected = withMarkdownExtension(result.filePath);
 			grantFileWithParent(selected);
 			return selected;
 		},
