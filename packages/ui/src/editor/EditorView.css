@@ -75,21 +75,28 @@
 }
 
 [data-hubble-editor] .ProseMirror h1 {
-	font-size: 1.5rem;
+	font-size: 1.75rem;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+[data-hubble-editor] .ProseMirror h2 {
+	font-size: 1.4rem;
 	font-weight: 600;
 	line-height: 1.25;
 }
 
-[data-hubble-editor] .ProseMirror h2 {
-	font-size: 1.2rem;
+[data-hubble-editor] .ProseMirror h3 {
+	font-size: 1.15rem;
 	font-weight: 600;
 	line-height: 1.3;
 }
 
-[data-hubble-editor] .ProseMirror h3 {
-	font-size: 1rem;
+[data-hubble-editor] .ProseMirror h4 {
+	font-size: 1.05rem;
 	font-weight: 600;
-	line-height: 1.3;
+	line-height: 1.35;
+	color: color-mix(in oklab, var(--foreground) 75%, var(--muted-foreground));
 }
 
 [data-hubble-editor] .ProseMirror ul {
