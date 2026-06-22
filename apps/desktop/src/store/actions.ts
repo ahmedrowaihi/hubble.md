@@ -311,6 +311,16 @@ export async function openWorkspaceWithSidebar() {
 	}
 }
 
+/** Creates a new folder, opens it as a workspace, and reveals the sidebar. */
+export async function createWorkspaceWithSidebar() {
+	const created = await desktopApi.createFolderPicker();
+	if (typeof created !== "string") return;
+	await openWorkspace(created);
+	if (workspaceStore.get().workspacePath !== null) {
+		sidebarOpenStore.set(true);
+	}
+}
+
 /** Opens a workspace by path. If no path given, shows a folder picker first. */
 export async function openWorkspace(path?: string) {
 	let nextPath = path;

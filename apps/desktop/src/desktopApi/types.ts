@@ -58,6 +58,7 @@ export type WorkspaceConfig = {
 
 export type DesktopApi = {
 	platform: DesktopPlatform;
+	homeDir: string;
 	listDirectory(path: string): Promise<FileEntry[]>;
 	listHtmlAppFiles(
 		workspacePath: string,
@@ -80,6 +81,7 @@ export type DesktopApi = {
 	writeBinaryFile(path: string, bytes: number[]): Promise<void>;
 	openFilePicker(options: { defaultPath?: string }): Promise<string | null>;
 	openFolderPicker(): Promise<string | null>;
+	createFolderPicker(): Promise<string | null>;
 	saveMarkdownFilePicker(options: {
 		defaultPath?: string;
 	}): Promise<string | null>;

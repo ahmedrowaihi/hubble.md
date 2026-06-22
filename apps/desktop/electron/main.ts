@@ -964,6 +964,20 @@ function registerIpc() {
 		return selected;
 	});
 
+	ipcMain.handle("desktop:create-folder-picker", async () => {
+		const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+			title: "New Folder",
+			nameFieldLabel: "Folder name:",
+			buttonLabel: "Create",
+			properties: ["createDirectory"],
+		});
+		if (result.canceled || !result.filePath) return null;
+		const folderPath = result.filePath;
+		await fs.mkdir(folderPath, { recursive: true });
+		grantRoot(folderPath);
+		return folderPath;
+	});
+
 	ipcMain.handle(
 		"desktop:save-markdown-file-picker",
 		async (_event, options = {}) => {

@@ -9,6 +9,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Rounded display face, shared with the marketing site. */
+@font-face {
+	font-family: "Fredoka";
+	src: url("/fonts/Fredoka-Variable.ttf") format("truetype-variations");
+	font-weight: 300 700;
+	font-display: swap;
+}
+
 /* Desktop-only shadcn token extensions; shared light tokens live in theme.css. */
 :root {
 	--destructive-foreground: oklch(0.985 0 0);
@@ -29,6 +37,7 @@
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
+	--font-rounded: "Fredoka", ui-sans-serif, system-ui, sans-serif;
 	--ease-spring-expressive: var(--ease-spring-3);
 	--default-transition-timing-function: var(--ease-snappy);
 	--transition-property-position:
@@ -87,5 +96,30 @@
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
+	}
+}
+
+@keyframes welcome-rise {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@layer components {
+	.welcome-rise {
+		opacity: 0;
+		animation: welcome-rise 0.5s var(--ease-out-3) both;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.welcome-rise {
+			animation: none;
+			opacity: 1;
+			transform: none;
+		}
 	}
 }

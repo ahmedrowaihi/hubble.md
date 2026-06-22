@@ -288,7 +288,10 @@ if (process.platform === "darwin") {
 	env.HUBBLE_DESKTOP_DEV_APP_NAME = devAppName;
 	await ensurePlayground();
 	await ensurePlaygroundHtml();
-	env.HUBBLE_DESKTOP_DEV_WORKSPACE = playgroundPath;
+	// Default to the playground, but let an explicit env value win (set it empty
+	// to launch with no workspace and test the first-run welcome screen).
+	env.HUBBLE_DESKTOP_DEV_WORKSPACE =
+		process.env.HUBBLE_DESKTOP_DEV_WORKSPACE ?? playgroundPath;
 	await killExistingDevAppProcesses();
 	console.log(`Computer Use app: ${devBundleId}`);
 	console.log(`Playground: ${playgroundPath}`);

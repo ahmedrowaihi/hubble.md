@@ -4,6 +4,10 @@ import { useStoreValue } from "@simplestack/store/react";
 import { keymatch } from "keymatch";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+	HtmlAppsDialog,
+	SidebarHtmlAppsCallout,
+} from "./components/HtmlAppsCallout";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
@@ -11,6 +15,7 @@ import {
 	SidebarUpdateCallout,
 	UpdatesSection,
 } from "./components/UpdatesSection";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import { desktopApi } from "./desktopApi";
 import type { DesktopUpdateState } from "./desktopApi/types";
 import { createEmbedExtension } from "./editor/EmbedExtension";
@@ -19,9 +24,11 @@ import { IframeView, toAssetUrl } from "./editor/IframeView";
 import { createImageExtension } from "./editor/ImageExtension";
 import { createMarkdownFile } from "./fileActions";
 import { hasHtmlExtension, relativeWorkspacePath } from "./lib/filePath";
+import { hasHubbleSkillsInstalled } from "./lib/hubbleSkills";
 import { resolveWikiPath } from "./lib/wikiPath";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
+	createWorkspaceWithSidebar,
 	forceKeepLocalEdits,
 	getPendingRenameTarget,
 	handleExternalFileChange,
@@ -51,6 +58,15 @@ const HMR_REV = (() => {
 	hotData.__editorRev = (hotData.__editorRev ?? 0) + 1;
 	return hotData.__editorRev;
 })();
+
+const HTML_APPS_CALLOUT_DISMISSED_PREFIX =
+	"hubble:html-apps-callout-dismissed:";
+
+function isHtmlAppsCalloutDismissed(workspacePath: string) {
+	return Boolean(
+		localStorage.getItem(HTML_APPS_CALLOUT_DISMISSED_PREFIX + workspacePath),
+	);
+}
 
 function focusSidebarNav() {
 	document.querySelector<HTMLElement>(SIDEBAR_NAV_SELECTOR)?.focus();
@@ -92,6 +108,34 @@ function App() {
 		null,
 	);
 	const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
+	const [htmlAppsDialogOpen, setHtmlAppsDialogOpen] = useState(false);
+	const [htmlAppsCalloutVisible, setHtmlAppsCalloutVisible] = useState(false);
+
+	const dismissHtmlAppsCallout = useCallback(() => {
+		if (workspacePath) {
+			localStorage.setItem(
+				HTML_APPS_CALLOUT_DISMISSED_PREFIX + workspacePath,
+				"1",
+			);
+		}
+		setHtmlAppsCalloutVisible(false);
+	}, [workspacePath]);
+
+	// Show the HTML Apps callout when a folder is open, the Hubble skills are
+	// not installed there, and it has not been dismissed for that folder.
+	useEffect(() => {
+		if (!workspacePath || isHtmlAppsCalloutDismissed(workspacePath)) {
+			setHtmlAppsCalloutVisible(false);
+			return;
+		}
+		let active = true;
+		void hasHubbleSkillsInstalled(workspacePath).then((installed) => {
+			if (active) setHtmlAppsCalloutVisible(!installed);
+		});
+		return () => {
+			active = false;
+		};
+	}, [workspacePath]);
 	const readyVersion =
 		updateState?.status === "ready"
 			? (updateState.availableVersion ?? "__unknown__")
@@ -327,6 +371,11 @@ function App() {
 									setDismissedVersion(readyVersion ?? "__unknown__")
 								}
 							/>
+						) : htmlAppsCalloutVisible ? (
+							<SidebarHtmlAppsCallout
+								onShowMore={() => setHtmlAppsDialogOpen(true)}
+								onDismiss={dismissHtmlAppsCallout}
+							/>
 						) : undefined
 					}
 				/>
@@ -339,31 +388,16 @@ function App() {
 						state.status !== "error" &&
 						!state.currentPath && (
 							<div className="flex h-full items-center justify-center p-6">
-								<div className="flex max-w-sm flex-col items-center gap-2 text-center">
-									{!hasWorkspace && (
-										<>
-											<h2 className="text-xl font-semibold">
-												Welcome to Hubble.md
-											</h2>
-											<p className="text-sm text-muted-foreground mb-2">
-												Let's write some markdown together.
-											</p>
-										</>
-									)}
-									<div className="flex flex-wrap items-center justify-center gap-2">
-										<Button onClick={() => void openFilePicker()}>
-											Open file
-										</Button>
-										{!hasWorkspace && (
-											<Button
-												variant="outline"
-												onClick={() => void openWorkspaceWithSidebar()}
-											>
-												Open folder
-											</Button>
-										)}
-									</div>
-								</div>
+								{hasWorkspace ? (
+									<Button onClick={() => void openFilePicker()}>
+										Open file
+									</Button>
+								) : (
+									<WelcomeScreen
+										onCreateFolder={() => void createWorkspaceWithSidebar()}
+										onOpenFolder={() => void openWorkspaceWithSidebar()}
+									/>
+								)}
 							</div>
 						)}
 					{state.status === "ready" && state.currentPath && (
@@ -391,6 +425,11 @@ function App() {
 					/>
 				) : null}
 			</SettingsDialog>
+			<HtmlAppsDialog
+				open={htmlAppsDialogOpen}
+				onOpenChange={setHtmlAppsDialogOpen}
+				workspacePath={workspacePath ?? null}
+			/>
 		</main>
 	);
 }

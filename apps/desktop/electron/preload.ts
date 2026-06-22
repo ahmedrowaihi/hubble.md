@@ -1,3 +1,4 @@
+import os from "node:os";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopApi } from "../src/desktopApi/types";
 
@@ -15,6 +16,7 @@ let nextWatchId = 0;
 
 const desktopApi = {
 	platform: process.platform,
+	homeDir: os.homedir(),
 	listDirectory: (path) =>
 		ipcRenderer.invoke("desktop:list-directory", { path }),
 	listHtmlAppFiles: (workspacePath, glob) =>
@@ -44,6 +46,7 @@ const desktopApi = {
 	openFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:open-file-picker", options),
 	openFolderPicker: () => ipcRenderer.invoke("desktop:open-folder-picker"),
+	createFolderPicker: () => ipcRenderer.invoke("desktop:create-folder-picker"),
 	saveMarkdownFilePicker: (options) =>
 		ipcRenderer.invoke("desktop:save-markdown-file-picker", options),
 	watchPath: async (path, options, callback) => {

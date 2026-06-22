@@ -17,9 +17,7 @@ export function SettingsDialog({
 			title="Settings"
 			className="max-w-2xl"
 		>
-			<div className="flex max-h-[min(80dvh,42rem)] flex-col gap-4 overflow-y-auto">
-				{children}
-			</div>
+			<div className="flex flex-col gap-4">{children}</div>
 		</Modal>
 	);
 }
