@@ -13,6 +13,7 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
+	nativeTheme,
 	protocol,
 	screen,
 	shell,
@@ -89,6 +90,8 @@ const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";
 // Check every 4 hours after the initial packaged-app update check.
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
+
+nativeTheme.themeSource = "light";
 
 app.setName(appName);
 if (devAppName) {
@@ -923,7 +926,9 @@ async function createWindow() {
 		height: windowState.height,
 		show: false,
 		titleBarStyle: "hidden",
-		...(process.platform !== "darwin" ? { titleBarOverlay: true } : {}),
+		...(process.platform !== "darwin"
+			? { titleBarOverlay: { color: "#ffffff", symbolColor: "#454545" } }
+			: {}),
 		trafficLightPosition: trafficLightPositionForZoom(zoomFactor),
 		webPreferences: {
 			contextIsolation: true,
