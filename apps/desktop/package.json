@@ -87,7 +87,8 @@
 				"provider": "github",
 				"owner": "bholmesdev",
 				"repo": "hubble.md",
-				"tagNamePrefix": "desktop-v"
+				"tagNamePrefix": "desktop-v",
+				"releaseType": "release"
 			}
 		],
 		"mac": {
