@@ -12,6 +12,10 @@ import {
 } from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
 import { TaskItem } from "@tiptap/extension-list";
+import Table from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
 import {
 	EditorContent,
 	type EditorOptions,
@@ -144,6 +148,10 @@ export function EditorView({
 			...listExtensions,
 			...extensions,
 			TaskItem.configure({ nested: true }),
+			Table.configure({ resizable: true }),
+			TableRow,
+			TableHeader,
+			TableCell,
 		],
 		content: initialDoc,
 		onUpdate: ({ editor: current }) => {
