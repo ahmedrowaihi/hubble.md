@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { HtmlAppEmptyState } from "./components/HtmlAppEmptyState";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
+import { TerminalPanel } from "./components/TerminalPanel";
 import { Toolbar } from "./components/Toolbar";
 import {
 	SidebarUpdateCallout,
@@ -365,6 +366,7 @@ function App() {
 					)}
 				</section>
 			</div>
+			<TerminalPanel />
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen}>
 				{updateState ? (
 					<UpdatesSection
