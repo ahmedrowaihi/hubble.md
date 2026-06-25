@@ -3,4 +3,7 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
+  - electron-winstaller
   - esbuild
+  - msw
+  - sharp

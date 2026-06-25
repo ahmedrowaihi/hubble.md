@@ -13,6 +13,7 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
+	nativeTheme,
 	protocol,
 	screen,
 	shell,
@@ -86,6 +87,8 @@ const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";
 // Check every 4 hours after the initial packaged-app update check.
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
+
+nativeTheme.themeSource = "light";
 
 app.setName(appName);
 if (devAppName) {
@@ -926,6 +929,9 @@ async function createWindow() {
 		height: windowState.height,
 		show: false,
 		titleBarStyle: "hidden",
+		...(process.platform !== "darwin"
+			? { titleBarOverlay: { color: "#ffffff", symbolColor: "#454545" } }
+			: {}),
 		trafficLightPosition: trafficLightPositionForZoom(zoomFactor),
 		webPreferences: {
 			contextIsolation: true,
@@ -949,6 +955,18 @@ async function createWindow() {
 	});
 
 	window.on("focus", () => sendToRenderer("desktop:window-focus"));
+
+	// On Linux/Windows the menu bar is hidden by the custom title bar, so menu
+	// accelerators (incl. DevTools) don't fire. Bind the DevTools toggle directly.
+	if (isDev && process.platform !== "darwin") {
+		window.webContents.on("before-input-event", (_event, input) => {
+			if (input.type !== "keyDown") return;
+			const key = input.key.toLowerCase();
+			if (key === "f12" || (input.control && input.shift && key === "i")) {
+				window.webContents.toggleDevTools();
+			}
+		});
+	}
 	window.on("enter-full-screen", () =>
 		sendToRenderer("desktop:fullscreen-change", true),
 	);
@@ -1195,17 +1213,32 @@ function registerIpc() {
 	});
 
 	ipcMain.handle("desktop:create-folder-picker", async () => {
-		const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+		// macOS save dialog supports naming a new folder inline via createDirectory.
+		if (process.platform === "darwin") {
+			const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+				title: "New Folder",
+				nameFieldLabel: "Folder name:",
+				buttonLabel: "Create",
+				properties: ["createDirectory"],
+			});
+			if (result.canceled || !result.filePath) return null;
+			const folderPath = result.filePath;
+			await fs.mkdir(folderPath, { recursive: true });
+			grantRoot(folderPath);
+			return folderPath;
+		}
+		// Linux/Windows: the native directory picker has a "New Folder" button,
+		// so create + select happen there and the path opens as the workspace.
+		const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
 			title: "New Folder",
-			nameFieldLabel: "Folder name:",
 			buttonLabel: "Create",
-			properties: ["createDirectory"],
+			properties: ["openDirectory", "createDirectory"],
 		});
-		if (result.canceled || !result.filePath) return null;
-		const folderPath = result.filePath;
-		await fs.mkdir(folderPath, { recursive: true });
-		grantRoot(folderPath);
-		return folderPath;
+		const selected = result.filePaths[0] ?? null;
+		if (!selected) return null;
+		await fs.mkdir(selected, { recursive: true });
+		grantRoot(selected);
+		return selected;
 	});
 
 	ipcMain.handle(
