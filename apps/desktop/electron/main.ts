@@ -651,6 +651,8 @@ function buildMenu() {
 							{ role: "reload" },
 							{ role: "forceReload" },
 							{ type: "separator" },
+							// On Linux/Windows the hidden menu bar swallows this
+							// accelerator, so the key is also bound in createWindow.
 							{ role: "toggleDevTools" },
 						] satisfies Electron.MenuItemConstructorOptions[])
 					: []),
@@ -955,6 +957,18 @@ async function createWindow() {
 	});
 
 	window.on("focus", () => sendToRenderer("desktop:window-focus"));
+
+	// On Linux/Windows the menu bar is hidden by the custom title bar, so menu
+	// accelerators (incl. DevTools) don't fire. Bind the DevTools toggle directly.
+	if (isDev && process.platform !== "darwin") {
+		window.webContents.on("before-input-event", (_event, input) => {
+			if (input.type !== "keyDown") return;
+			const key = input.key.toLowerCase();
+			if (key === "f12" || (input.control && input.shift && key === "i")) {
+				window.webContents.toggleDevTools();
+			}
+		});
+	}
 	window.on("enter-full-screen", () =>
 		sendToRenderer("desktop:fullscreen-change", true),
 	);

@@ -108,6 +108,9 @@
 				"deb"
 			]
 		},
+		"appImage": {
+			"artifactName": "hubble_${version}_${arch}.${ext}"
+		},
 		"deb": {
 			"packageName": "hubble.md",
 			"artifactName": "hubble_${version}_${arch}.${ext}"
