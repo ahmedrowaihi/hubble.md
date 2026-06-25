@@ -651,8 +651,6 @@ function buildMenu() {
 							{ role: "reload" },
 							{ role: "forceReload" },
 							{ type: "separator" },
-							// On Linux/Windows the hidden menu bar swallows this
-							// accelerator, so the key is also bound in createWindow.
 							{ role: "toggleDevTools" },
 						] satisfies Electron.MenuItemConstructorOptions[])
 					: []),
