@@ -33,10 +33,10 @@ From repo root:
 
 ```sh
 pnpm build:desktop
-pnpm bundle:desktop
+pnpm bundle:desktop:mac
 ```
 
-`bundle:desktop` creates macOS release artifacts under `apps/desktop/release/`.
+`bundle:desktop:mac` creates macOS release artifacts under `apps/desktop/release/`.
 
 ## Distribution
 

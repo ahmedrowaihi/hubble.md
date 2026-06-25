@@ -38,7 +38,9 @@ Then from the repo root:
 
 ```sh
 pnpm install
-pnpm bundle:desktop
+pnpm bundle:desktop:mac
+# or for linux:
+pnpm bundle:desktop:linux
 ```
 
 This creates a production desktop bundle under `apps/desktop/release/`. For the live dev flow and packaging detail, see [`apps/desktop/README.md`](./apps/desktop/README.md).
@@ -72,7 +74,7 @@ pnpm install          # install dependencies
 pnpm dev:desktop      # run the desktop app in dev
 pnpm dev:www          # run the web app in dev
 pnpm build            # check, build all packages, and typecheck
-pnpm bundle:desktop   # build a production desktop bundle
+pnpm bundle:desktop:mac   # build a production desktop bundle for macOS
 pnpm check            # run Biome
 pnpm typecheck        # typecheck all packages
 ```
