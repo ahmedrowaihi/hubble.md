@@ -8,6 +8,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- Windows desktop builds (NSIS installer)
 - Linux desktop builds (AppImage and Debian package)
 - Native window controls (minimize, maximize, close) on Windows and Linux
 
