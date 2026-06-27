@@ -8,6 +8,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- Find text in the editor with highlighted matches and next/previous navigation
 
 ### Changed
 
