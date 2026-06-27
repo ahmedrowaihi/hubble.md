@@ -837,6 +837,10 @@ export function Sidebar({
 								rows,
 							})
 						: null;
+					const selectionGroup =
+						isSelected && !dropGroup
+							? rowSelectionGroup({ index, rows, selectedKeys })
+							: null;
 					return (
 						<DraggableSidebarRow
 							key={row.kind === "folder" ? row.id : row.file.path}
@@ -869,7 +873,16 @@ export function Sidebar({
 													dropGroup.end &&
 														"rounded-ee-[var(--radius-row)] rounded-es-[var(--radius-row)]",
 												]
-											: "rounded-[var(--radius-row)]",
+											: // Round only the outer corners of a contiguous
+												// multi-select run so adjacent rows look like one block
+												selectionGroup
+												? [
+														selectionGroup.start &&
+															"rounded-se-[var(--radius-row)] rounded-ss-[var(--radius-row)]",
+														selectionGroup.end &&
+															"rounded-ee-[var(--radius-row)] rounded-es-[var(--radius-row)]",
+													]
+												: "rounded-[var(--radius-row)]",
 										isRenaming && "relative z-30",
 										isPinnedSectionEnd && "mb-3",
 										rowKey &&
@@ -1430,6 +1443,26 @@ function rowDropGroup({
 			!previous ||
 			!rowInFolderDropTarget(previous, target.folderId, getDisplayPath),
 		end: !next || !rowInFolderDropTarget(next, target.folderId, getDisplayPath),
+	};
+}
+
+function rowSelectionGroup({
+	index,
+	rows,
+	selectedKeys,
+}: {
+	index: number;
+	rows: SidebarRow[];
+	selectedKeys: Set<string>;
+}) {
+	const inSelection = (row: SidebarRow | null) => {
+		const key = row ? sidebarRowKey(row) : null;
+		return key ? selectedKeys.has(key) : false;
+	};
+	if (!inSelection(rows[index])) return null;
+	return {
+		start: !inSelection(previousSidebarItem(rows, index)),
+		end: !inSelection(nextSidebarItem(rows, index)),
 	};
 }
 
