@@ -328,7 +328,10 @@ function App() {
 						) : undefined
 					}
 				/>
-				<section className="flex-1 flex flex-col overflow-hidden" aria-live="polite">
+				<section
+					className="flex-1 flex flex-col overflow-hidden"
+					aria-live="polite"
+				>
 					<div className="flex-1 min-h-0 relative">
 						{state.status === "loading" && <p>Loading…</p>}
 						{state.status === "error" && (

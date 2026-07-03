@@ -1,7 +1,7 @@
 import { useStoreValue } from "@simplestack/store/react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { desktopApi } from "../desktopApi";
 import { cn } from "../lib/utils";
 import { setTerminalOpen, toggleTerminal } from "../store/actions";
@@ -14,6 +14,72 @@ type Session = {
 	id: string;
 	title: string;
 };
+
+type TerminalState = {
+	sessions: Session[];
+	activeSessionId: string | null;
+};
+
+type TerminalAction =
+	| { type: "activate"; sessionId: string }
+	| { type: "add"; session: Session }
+	| { type: "remove"; sessionId: string }
+	| { type: "reset" };
+
+const EMPTY_TERMINAL_STATE: TerminalState = {
+	sessions: [],
+	activeSessionId: null,
+};
+
+function fallbackActiveSessionId(
+	sessions: Session[],
+	activeSessionId: string | null,
+): string | null {
+	if (
+		activeSessionId &&
+		sessions.some((session) => session.id === activeSessionId)
+	) {
+		return activeSessionId;
+	}
+	return sessions[sessions.length - 1]?.id ?? null;
+}
+
+function terminalStateReducer(
+	state: TerminalState,
+	action: TerminalAction,
+): TerminalState {
+	switch (action.type) {
+		case "activate":
+			if (!state.sessions.some((session) => session.id === action.sessionId)) {
+				return state;
+			}
+			return {
+				...state,
+				activeSessionId: action.sessionId,
+			};
+		case "add":
+			return {
+				sessions: [...state.sessions, action.session],
+				activeSessionId: action.session.id,
+			};
+		case "remove": {
+			const sessions = state.sessions.filter(
+				(session) => session.id !== action.sessionId,
+			);
+			return {
+				sessions,
+				activeSessionId: fallbackActiveSessionId(
+					sessions,
+					state.activeSessionId === action.sessionId
+						? null
+						: state.activeSessionId,
+				),
+			};
+		}
+		case "reset":
+			return EMPTY_TERMINAL_STATE;
+	}
+}
 
 function cssColorToRgba(color: string): string {
 	const canvas = document.createElement("canvas");
@@ -68,11 +134,16 @@ const DARK_THEME = {
 export function TerminalPanel() {
 	const isOpen = useStoreValue(terminalOpenStore);
 	const workspacePath = useStoreValue(workspacePathStore);
-	const [sessions, setSessions] = useState<Session[]>([]);
-	const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+	const [{ sessions, activeSessionId }, dispatch] = useReducer(
+		terminalStateReducer,
+		EMPTY_TERMINAL_STATE,
+	);
 	const [height, setHeight] = useState(256);
 	const isInitializingRef = useRef(false);
 	const isDraggingRef = useRef(false);
+	const suppressAutoCloseRef = useRef(false);
+	const previousSessionCountRef = useRef(0);
+	const previousWorkspacePathRef = useRef<string | null | undefined>(undefined);
 
 	useEffect(() => {
 		const handleMouseMove = (e: MouseEvent) => {
@@ -98,6 +169,46 @@ export function TerminalPanel() {
 		};
 	}, []);
 
+	useEffect(() => {
+		if (sessions.length === 0 && previousSessionCountRef.current > 0) {
+			if (suppressAutoCloseRef.current) {
+				// Workspace switches clear the old sessions, but the panel should
+				// stay open so the new workspace can boot a fresh shell.
+				suppressAutoCloseRef.current = false;
+			} else {
+				isInitializingRef.current = false;
+				queueMicrotask(() => setTerminalOpen(false));
+			}
+		}
+		previousSessionCountRef.current = sessions.length;
+	}, [sessions.length]);
+
+	useEffect(() => {
+		const previousWorkspacePath = previousWorkspacePathRef.current;
+		previousWorkspacePathRef.current = workspacePath;
+
+		if (
+			previousWorkspacePath === undefined ||
+			previousWorkspacePath === workspacePath
+		) {
+			return;
+		}
+
+		if (sessions.length === 0) {
+			return;
+		}
+
+		suppressAutoCloseRef.current = true;
+		isInitializingRef.current = false;
+
+		const sessionIds = sessions.map((session) => session.id);
+		dispatch({ type: "reset" });
+
+		void Promise.all(
+			sessionIds.map((sessionId) => desktopApi.terminalStop(sessionId)),
+		);
+	}, [sessions, workspacePath]);
+
 	// Create a new session when the panel is opened and there are no sessions
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional
 	useEffect(() => {
@@ -114,24 +225,24 @@ export function TerminalPanel() {
 
 	const handleNewSession = async () => {
 		if (!workspacePath) return;
-		const sessionId = await desktopApi.terminalStart(workspacePath);
-		setSessions((prev) => [...prev, { id: sessionId, title: `bash` }]);
-		setActiveSessionId(sessionId);
+		try {
+			const sessionId = await desktopApi.terminalStart(workspacePath);
+			dispatch({
+				type: "add",
+				session: { id: sessionId, title: "bash" },
+			});
+		} finally {
+			isInitializingRef.current = false;
+		}
 	};
 
 	const handleCloseSession = async (sessionId: string) => {
 		await desktopApi.terminalStop(sessionId);
-		setSessions((prev) => {
-			const next = prev.filter((s) => s.id !== sessionId);
-			if (activeSessionId === sessionId) {
-				setActiveSessionId(next.length > 0 ? next[next.length - 1].id : null);
-			}
-			if (next.length === 0) {
-				isInitializingRef.current = false;
-				queueMicrotask(() => setTerminalOpen(false));
-			}
-			return next;
-		});
+		dispatch({ type: "remove", sessionId });
+	};
+
+	const handleSessionExit = (sessionId: string) => {
+		dispatch({ type: "remove", sessionId });
 	};
 
 	return (
@@ -143,7 +254,9 @@ export function TerminalPanel() {
 			)}
 		>
 			{/* Resizer Handle */}
-			<div
+			<button
+				type="button"
+				aria-label="Resize terminal panel"
 				className="absolute -top-1 left-0 right-0 h-2 cursor-row-resize z-30 hover:bg-ring/30 transition-colors"
 				onMouseDown={(e) => {
 					e.preventDefault();
@@ -155,32 +268,37 @@ export function TerminalPanel() {
 			<div className="flex items-center h-9 px-2 border-b border-border bg-muted/30 select-none">
 				<div className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar">
 					{sessions.map((session) => (
-						<button
-							type="button"
+						<div
 							key={session.id}
 							className={cn(
-								"group flex items-center gap-2 px-3 py-1 text-xs rounded-md cursor-pointer transition-colors max-w-32",
+								"group flex max-w-32 items-center rounded-md text-xs transition-colors",
 								activeSessionId === session.id
 									? "bg-background text-foreground shadow-sm border border-border"
 									: "text-muted-foreground hover:bg-muted",
 							)}
-							onClick={() => setActiveSessionId(session.id)}
 						>
-							<span className="truncate flex-1">{session.title}</span>
 							<button
 								type="button"
+								aria-pressed={activeSessionId === session.id}
+								className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[inherit] [padding-block:0.25rem] [padding-inline:0.75rem]"
+								onClick={() =>
+									dispatch({ type: "activate", sessionId: session.id })
+								}
+							>
+								<span className="truncate flex-1">{session.title}</span>
+							</button>
+							<button
+								type="button"
+								aria-label={`Close terminal session ${session.title}`}
 								className={cn(
-									"p-0.5 rounded-sm hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity",
+									"me-1 rounded-sm p-0.5 opacity-0 transition-opacity hover:bg-muted-foreground/20 group-hover:opacity-100",
 									activeSessionId === session.id && "opacity-100",
 								)}
-								onClick={(e) => {
-									e.stopPropagation();
-									void handleCloseSession(session.id);
-								}}
+								onClick={() => void handleCloseSession(session.id)}
 							>
 								<MingcuteCloseLine className="w-3 h-3" />
 							</button>
-						</button>
+						</div>
 					))}
 					<button
 						type="button"
@@ -216,6 +334,7 @@ export function TerminalPanel() {
 						)}
 					>
 						<TerminalInstance
+							onExit={handleSessionExit}
 							sessionId={session.id}
 							isActive={activeSessionId === session.id}
 						/>
@@ -232,9 +351,11 @@ export function TerminalPanel() {
 }
 
 function TerminalInstance({
+	onExit,
 	sessionId,
 	isActive,
 }: {
+	onExit: (sessionId: string) => void;
 	sessionId: string;
 	isActive: boolean;
 }) {
@@ -257,14 +378,16 @@ function TerminalInstance({
 			const style = getComputedStyle(document.body);
 			const rawForeground = style.color || "#ececec";
 			const rawBackground = style.backgroundColor || "#ffffff";
-			
+
 			const foreground = cssColorToRgba(rawForeground);
 			const background = cssColorToRgba(rawBackground);
 
 			// Tailwind 4 outputs font-mono or default-mono-font-family
 			let fontFamily = style.getPropertyValue("--font-mono").trim();
 			if (!fontFamily) {
-				fontFamily = style.getPropertyValue("--default-mono-font-family").trim();
+				fontFamily = style
+					.getPropertyValue("--default-mono-font-family")
+					.trim();
 			}
 			if (!fontFamily) fontFamily = "monospace";
 
@@ -306,6 +429,9 @@ function TerminalInstance({
 		const unsubscribeData = desktopApi.onTerminalData(sessionId, (data) => {
 			term.write(data);
 		});
+		const unsubscribeExit = desktopApi.onTerminalExit(sessionId, () => {
+			onExit(sessionId);
+		});
 
 		let fitTimeout: ReturnType<typeof setTimeout>;
 		const resizeObserver = new ResizeObserver(() => {
@@ -326,15 +452,15 @@ function TerminalInstance({
 		// Initial fit
 		// ResizeObserver will handle the initial fit
 
-
 		return () => {
 			clearTimeout(fitTimeout);
 			unsubscribeData();
+			unsubscribeExit();
 			resizeObserver.disconnect();
 			themeObserver.disconnect();
 			term.dispose();
 		};
-	}, [sessionId]); // Important: Do NOT include isActive here, we don't want to re-mount xterm
+	}, [onExit, sessionId]); // Important: Do NOT include isActive here, we don't want to re-mount xterm
 
 	useEffect(() => {
 		if (
