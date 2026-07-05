@@ -25,6 +25,7 @@ type TerminalAction =
 	| { type: "activate"; sessionId: string }
 	| { type: "add"; session: Session }
 	| { type: "remove"; sessionId: string }
+	| { type: "rename"; sessionId: string; title: string }
 	| { type: "reset" };
 
 const EMPTY_TERMINAL_STATE: TerminalState = {
@@ -86,6 +87,15 @@ function terminalStateReducer(
 				),
 			};
 		}
+		case "rename":
+			return {
+				...state,
+				sessions: state.sessions.map((session) =>
+					session.id === action.sessionId
+						? { ...session, title: action.title }
+						: session,
+				),
+			};
 		case "reset":
 			return EMPTY_TERMINAL_STATE;
 	}
@@ -149,6 +159,10 @@ export function TerminalPanel() {
 		EMPTY_TERMINAL_STATE,
 	);
 	const [height, setHeight] = useState(256);
+	const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
+		null,
+	);
+	const [renameDraft, setRenameDraft] = useState("");
 	const isInitializingRef = useRef(false);
 	const suppressAutoCloseRef = useRef(false);
 	const previousSessionCountRef = useRef(0);
@@ -240,6 +254,20 @@ export function TerminalPanel() {
 		dispatch({ type: "remove", sessionId });
 	};
 
+	const beginRename = (session: Session) => {
+		setRenamingSessionId(session.id);
+		setRenameDraft(session.title);
+	};
+
+	const commitRename = () => {
+		if (!renamingSessionId) return;
+		const title = renameDraft.trim();
+		if (title) {
+			dispatch({ type: "rename", sessionId: renamingSessionId, title });
+		}
+		setRenamingSessionId(null);
+	};
+
 	return (
 		<div
 			style={{ height: isOpen ? height : undefined }}
@@ -273,16 +301,40 @@ export function TerminalPanel() {
 									: "text-muted-foreground hover:bg-muted",
 							)}
 						>
-							<button
-								type="button"
-								aria-pressed={activeSessionId === session.id}
-								className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[inherit] [padding-block:0.25rem] [padding-inline:0.75rem]"
-								onClick={() =>
-									dispatch({ type: "activate", sessionId: session.id })
-								}
-							>
-								<span className="truncate flex-1">{session.title}</span>
-							</button>
+							{renamingSessionId === session.id ? (
+								<input
+									// biome-ignore lint/a11y/noAutofocus: rename input appears on explicit double click
+									autoFocus
+									aria-label="Rename terminal session"
+									className="w-24 min-w-0 bg-transparent [padding-block:0.25rem] [padding-inline:0.75rem] text-xs outline-none"
+									value={renameDraft}
+									onFocus={(event) => event.currentTarget.select()}
+									onChange={(event) => setRenameDraft(event.target.value)}
+									onBlur={commitRename}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") {
+											event.preventDefault();
+											commitRename();
+										} else if (event.key === "Escape") {
+											event.preventDefault();
+											setRenamingSessionId(null);
+										}
+									}}
+								/>
+							) : (
+								<button
+									type="button"
+									aria-pressed={activeSessionId === session.id}
+									className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-[inherit] [padding-block:0.25rem] [padding-inline:0.75rem]"
+									title="Double click to rename"
+									onClick={() =>
+										dispatch({ type: "activate", sessionId: session.id })
+									}
+									onDoubleClick={() => beginRename(session)}
+								>
+									<span className="truncate flex-1">{session.title}</span>
+								</button>
+							)}
 							<button
 								type="button"
 								aria-label={`Close terminal session ${session.title}`}

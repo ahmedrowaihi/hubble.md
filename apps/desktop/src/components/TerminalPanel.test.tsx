@@ -339,6 +339,59 @@ describe("TerminalPanel", () => {
 		expect(appStore.get().ui.isTerminalOpen).toBe(false);
 	});
 
+	it("renames a tab from a double click on its title", async () => {
+		const { api } = createDesktopApi();
+		const { appStore, TerminalPanel } = await loadTerminalPanel(api);
+
+		appStore.set((state) => ({
+			...state,
+			workspace: {
+				...state.workspace,
+				workspacePath: "/workspace-a",
+			},
+			ui: {
+				...state.ui,
+				isTerminalOpen: true,
+			},
+		}));
+
+		await act(async () => {
+			root.render(<TerminalPanel />);
+			await flush();
+		});
+
+		await act(async () => {
+			getSessionButtons(container)[0]?.dispatchEvent(
+				new MouseEvent("dblclick", { bubbles: true }),
+			);
+			await flush();
+		});
+
+		const input = container.querySelector<HTMLInputElement>(
+			'input[aria-label="Rename terminal session"]',
+		);
+		if (!input) throw new Error("Missing rename input");
+		expect(input.value).toBe("bash");
+
+		await act(async () => {
+			const setValue = Object.getOwnPropertyDescriptor(
+				window.HTMLInputElement.prototype,
+				"value",
+			)?.set;
+			setValue?.call(input, "build");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+			input.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+			);
+			await flush();
+		});
+
+		expect(getSessionButtons(container)[0]?.textContent).toBe("build");
+		expect(
+			container.querySelector('input[aria-label="Rename terminal session"]'),
+		).toBeNull();
+	});
+
 	it("collapses the panel without stopping the running session", async () => {
 		const { api } = createDesktopApi();
 		const { appStore, TerminalPanel } = await loadTerminalPanel(api);
