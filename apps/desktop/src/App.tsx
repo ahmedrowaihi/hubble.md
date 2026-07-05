@@ -39,6 +39,7 @@ import {
 	savePathContent,
 	setSidebarOpen,
 	setWorkspaceSwitcherOpen,
+	toggleTerminal,
 	updateEditorContent,
 } from "./store/actions";
 import {
@@ -255,6 +256,7 @@ function App() {
 				setWorkspaceSwitcherOpen(true),
 			),
 			desktopApi.onMenuSyncWorkspace(() => void refreshFiles()),
+			desktopApi.onMenuToggleTerminal(() => toggleTerminal()),
 		];
 		return () => {
 			for (const dispose of disposers) dispose();

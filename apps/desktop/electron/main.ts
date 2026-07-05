@@ -707,6 +707,14 @@ function buildMenu() {
 					accelerator: "CmdOrCtrl+0",
 					click: () => resetWindowZoom(mainWindow),
 				},
+				{ type: "separator" },
+				{
+					id: "toggle-terminal",
+					label: "Toggle Terminal",
+					accelerator: "CmdOrCtrl+`",
+					enabled: menuState.hasWorkspace,
+					click: () => sendToRenderer("desktop:menu-toggle-terminal"),
+				},
 				...(isDev
 					? ([
 							{ type: "separator" },
