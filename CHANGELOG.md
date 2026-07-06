@@ -9,24 +9,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
-- Selecting text now shows a floating formatting toolbar for bold, italic, strikethrough, links, headings, lists, and quotes. Thanks [@hwong103](https://github.com/hwong103) for the suggestion! [#108](https://github.com/bholmesdev/hubble.md/issues/108)
-- Copy selected editor content as Markdown from the Edit menu or editor context menu, thanks to [@jambronner](https://github.com/jambronner) in [#122](https://github.com/bholmesdev/hubble.md/pull/122)
-- Terminal panel in the desktop app: toggle with Cmd+J to run shell commands in your workspace, with tabs, drag resize, and double click to rename
-- Chat about the open note with your agent CLI: pick it from the note's ⋯ menu or press Cmd+Shift+J, and customize the command in Settings
-- Add table support. Markdown tables now render as expected, and you can create new tables using `/table`. There are still editing features left to add, like adding and removing rows. Track progress on GitHub: [#99](https://github.com/bholmesdev/hubble.md/issues/99)
-- Create HTML Apps from the new file dropdown, folder menus, and the File menu
-- Empty HTML App files show a setup screen with the skill install command and a ready-to-copy agent prompt, with a check once the skills are detected
+- Selecting text now shows a floating formatting toolbar for bold, italic, strikethrough, links, headings, lists, and quotes. Thanks [@hwong103](https://github.com/hwong103)! [#108](https://github.com/bholmesdev/hubble.md/issues/108)
+- Copy selected editor content as Markdown from the Edit menu or editor context menu. Thanks [@jambronner](https://github.com/jambronner)! [#122](https://github.com/bholmesdev/hubble.md/pull/122)
+- Terminal panel in the desktop app: toggle with Cmd+J to run shell commands in your workspace, with tabs, drag resize, and double click to rename. Thanks [@israelvf](https://github.com/israelvf)! [#131](https://github.com/bholmesdev/hubble.md/pull/131)
+- Chat about the open note with your agent CLI: pick it from the note's ⋯ menu or press Cmd+Shift+J, and customize the command in Settings. [#139](https://github.com/bholmesdev/hubble.md/pull/139)
+- Add table support. Markdown tables now render as expected, and you can create new tables using `/table`. There are still editing features left to add, like adding and removing rows. Track progress on GitHub: [#99](https://github.com/bholmesdev/hubble.md/issues/99). Thanks [@israelvf](https://github.com/israelvf)! [#130](https://github.com/bholmesdev/hubble.md/pull/130)
+- Create HTML Apps from the new file dropdown, folder menus, and the File menu. [#141](https://github.com/bholmesdev/hubble.md/pull/141)
+- Empty HTML App files show a setup screen with the skill install command and a ready-to-copy agent prompt, with a check once the skills are detected. [#141](https://github.com/bholmesdev/hubble.md/pull/141)
 
 ### Changed
-- Keyboard shortcut hints now show the correct keys on Windows and Linux (Ctrl/Alt instead of macOS symbols)
-- More buttons and menus now show their keyboard shortcut, including the format and slash command menus
-- The HTML Apps popup in new workspaces is gone; setup now happens when you create an HTML App
+- Keyboard shortcut hints now show the correct keys on Windows and Linux (Ctrl/Alt instead of macOS symbols). [#137](https://github.com/bholmesdev/hubble.md/pull/137)
+- More buttons and menus now show their keyboard shortcut, including the format and slash command menus. [#137](https://github.com/bholmesdev/hubble.md/pull/137)
+- The HTML Apps popup in new workspaces is gone; setup now happens when you create an HTML App. [#141](https://github.com/bholmesdev/hubble.md/pull/141)
 
 ### Fixed
-- Desktop saves no longer drop trailing content in notes with multibyte characters
-- Relative Markdown file links now open the linked file instead of showing an invalid URL error
-
-- Bold, italic, and strikethrough selections with boundary spaces now save as valid Markdown (`**bold** next`, not `**bold **next`). Thanks [@luchopcerra](https://github.com/luchopcerra)! ([#128](https://github.com/bholmesdev/hubble.md/pull/128))
+- Desktop saves no longer drop trailing content in notes with multibyte characters. [#127](https://github.com/bholmesdev/hubble.md/pull/127)
+- Relative Markdown file links now open the linked file instead of showing an invalid URL error. [#145](https://github.com/bholmesdev/hubble.md/pull/145)
+- Bold, italic, and strikethrough selections with boundary spaces now save as valid Markdown (`**bold** next`, not `**bold **next`). Thanks [@luchopcerra](https://github.com/luchopcerra)! [#128](https://github.com/bholmesdev/hubble.md/pull/128)
 
 ## [0.1.16] - 2026-06-27
 
