@@ -1,5 +1,6 @@
 import {
 	combineMarkdownFrontMatter,
+	FakeSelectionExtension,
 	FindExtension,
 	HeadingExtension,
 	LinkExtension,
@@ -41,6 +42,7 @@ import {
 import { FindBar } from "./FindBar";
 import { FormatCommandMenu } from "./FormatCommandMenu";
 import { FormattingStatusBar } from "./FormattingStatusBar";
+import { SelectionFormattingToolbar } from "./SelectionFormattingToolbar";
 import type { VirtualCursorMode } from "./virtualCursorMode";
 
 const DEFAULT_SAVE_DEBOUNCE_MS = 120;
@@ -151,6 +153,7 @@ export function EditorView({
 			SmartLinkExtension,
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
+			FakeSelectionExtension,
 			FindExtension,
 			HeadingExtension,
 			MarkdownRolloverExtension,
@@ -309,6 +312,10 @@ export function EditorView({
 					onCursorModeChange={setCursorModeOverride}
 				/>
 				<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
+				<SelectionFormattingToolbar
+					editor={editor}
+					viewportRef={editorViewportRef}
+				/>
 				<FormatCommandMenu editor={editor} viewportRef={editorViewportRef} />
 			</div>
 			<FindBar editor={editor} />
