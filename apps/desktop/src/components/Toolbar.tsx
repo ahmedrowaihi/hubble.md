@@ -11,6 +11,7 @@ import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import MingcuteFolderOpenLine from "~icons/mingcute/folder-open-line";
 import MingcuteMore2Line from "~icons/mingcute/more-2-line";
 import { desktopApi } from "../desktopApi";
+import { copyText } from "../lib/clipboard";
 import { revealFileLabel } from "../lib/revealFile";
 import { renameCurrentMarkdownFile, toggleSidebar } from "../store/actions";
 import {
@@ -76,12 +77,7 @@ function NoteActionsMenu({ path }: { path: string }) {
 	}
 
 	async function copyFilePath() {
-		try {
-			await navigator.clipboard.writeText(path);
-			toast.success("File path copied");
-		} catch {
-			toast.error("Failed to copy file path");
-		}
+		await copyText(path, "File path");
 	}
 
 	return (

@@ -30,6 +30,8 @@ const desktopApi = {
 		}),
 	readFileText: (path) =>
 		ipcRenderer.invoke("desktop:read-file-text", { path }),
+	detectHubbleSkills: (workspacePath) =>
+		ipcRenderer.invoke("desktop:detect-hubble-skills", { workspacePath }),
 	writeFileText: (path, content) => {
 		// Encode in the renderer before IPC. Main should write these bytes as-is,
 		// because re-encoding the string there has truncated multibyte characters.
@@ -90,6 +92,8 @@ const desktopApi = {
 		subscribe("desktop:update-state", callback),
 	onMenuCreateMarkdownFile: (callback) =>
 		subscribe("desktop:menu-create-markdown-file", callback),
+	onMenuCreateHtmlFile: (callback) =>
+		subscribe("desktop:menu-create-html-file", callback),
 	onMenuOpenFile: (callback) => subscribe("desktop:menu-open-file", callback),
 	onMenuOpenFolder: (callback) =>
 		subscribe("desktop:menu-open-folder", callback),

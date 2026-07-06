@@ -28,6 +28,7 @@ import {
 } from "react";
 import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascending-letters-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteCodeLine from "~icons/mingcute/code-line";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import MingcuteDeleteLine from "~icons/mingcute/delete-line";
 import MingcuteEditLine from "~icons/mingcute/edit-line";
@@ -341,6 +342,7 @@ export function Sidebar({
 	onDeleteFile,
 	onTogglePinnedFile,
 	onCreateFile,
+	onCreateHtmlFile,
 	onCreateFolder,
 	onDeleteFolder,
 	onMoveItem,
@@ -373,6 +375,7 @@ export function Sidebar({
 	onDeleteFile?: (path: string) => void;
 	onTogglePinnedFile?: (path: string) => void;
 	onCreateFile?: (folderId: string | null) => Promise<string | null>;
+	onCreateHtmlFile?: (folderId: string | null) => Promise<string | null>;
 	onCreateFolder?: (folderId: string | null) => Promise<string | null>;
 	onDeleteFolder?: (folderId: string) => void;
 	onMoveItem?: (input: SidebarMoveItemInput) => Promise<void> | void;
@@ -450,6 +453,23 @@ export function Sidebar({
 			);
 		},
 		[beginRename, expandFolder, getDisplayPath, onCreateFile],
+	);
+	const createHtmlFile = useCallback(
+		async (folderId: string | null) => {
+			if (!onCreateHtmlFile) return;
+			setOpenActionsPath(null);
+			if (folderId) expandFolder(folderId);
+			const path = await onCreateHtmlFile(folderId);
+			if (!path) return;
+			beginRename(
+				{ kind: "file", path },
+				fileNameFromPath(getDisplayPath(path)),
+				{
+					deleteOnUnchangedCancel: true,
+				},
+			);
+		},
+		[beginRename, expandFolder, getDisplayPath, onCreateHtmlFile],
 	);
 	const createFolder = useCallback(
 		async (folderId: string | null) => {
@@ -1022,6 +1042,11 @@ export function Sidebar({
 													onRevealFolder={onRevealFolder}
 													revealLabel={revealLabel}
 													onCreateFile={(id) => void createFile(id)}
+													onCreateHtmlFile={
+														onCreateHtmlFile
+															? (id) => void createHtmlFile(id)
+															: undefined
+													}
 													onCreateFolder={(id) => void createFolder(id)}
 													onRenameFolder={
 														onRenameFolder
@@ -1112,15 +1137,12 @@ export function Sidebar({
 				)}
 				<div className="flex items-center gap-1">
 					{onCreateFile && (
-						<Button
-							variant="ghost"
-							size="icon-xs"
-							aria-label="New file"
-							title={`New file (${formatShortcut("CmdOrCtrl+N")})`}
-							onClick={() => void createFile(null)}
-						>
-							<MingcuteEditLine className="size-3.5" />
-						</Button>
+						<NewFileMenu
+							onCreateFile={() => void createFile(null)}
+							onCreateHtmlFile={
+								onCreateHtmlFile ? () => void createHtmlFile(null) : undefined
+							}
+						/>
 					)}
 					{onCreateFolder && (
 						<Button
@@ -1657,6 +1679,53 @@ export function SidebarFrame({
 	);
 }
 
+function NewFileMenu({
+	onCreateFile,
+	onCreateHtmlFile,
+}: {
+	onCreateFile: () => void;
+	onCreateHtmlFile?: () => void;
+}) {
+	const [open, setOpen] = useState(false);
+	return (
+		<Menu.Root open={open} onOpenChange={setOpen}>
+			<Menu.Trigger
+				render={
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						aria-label="New file"
+						title="New file"
+					/>
+				}
+			>
+				<MingcuteEditLine className="size-3.5" />
+			</Menu.Trigger>
+			<Menu.Portal>
+				<Menu.Positioner align="end" side="bottom" sideOffset={4}>
+					<Menu.Popup className="z-50 w-44 origin-(--transform-origin) rounded-[var(--radius-popover)] border border-border bg-popover p-1 text-[11px] text-popover-foreground shadow-overlay outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+						<ActionItem
+							icon={<MingcuteEditLine />}
+							onClick={onCreateFile}
+							shortcut={formatShortcut("CmdOrCtrl+N")}
+						>
+							New Note
+						</ActionItem>
+						{onCreateHtmlFile && (
+							<ActionItem
+								icon={<MingcuteCodeLine />}
+								onClick={onCreateHtmlFile}
+							>
+								New HTML App
+							</ActionItem>
+						)}
+					</Menu.Popup>
+				</Menu.Positioner>
+			</Menu.Portal>
+		</Menu.Root>
+	);
+}
+
 function FolderActionsMenu({
 	id,
 	label,
@@ -1665,6 +1734,7 @@ function FolderActionsMenu({
 	onRevealFolder,
 	revealLabel,
 	onCreateFile,
+	onCreateHtmlFile,
 	onCreateFolder,
 	onRenameFolder,
 	onDeleteFolder,
@@ -1676,6 +1746,7 @@ function FolderActionsMenu({
 	onRevealFolder?: (id: string) => void;
 	revealLabel?: string;
 	onCreateFile?: (id: string) => void;
+	onCreateHtmlFile?: (id: string) => void;
 	onCreateFolder?: (id: string) => void;
 	onRenameFolder?: (id: string, label: string) => void;
 	onDeleteFolder?: (id: string) => void;
@@ -1698,6 +1769,14 @@ function FolderActionsMenu({
 					shortcut={formatShortcut("CmdOrCtrl+N")}
 				>
 					New file
+				</ActionItem>
+			)}
+			{onCreateHtmlFile && (
+				<ActionItem
+					icon={<MingcuteCodeLine />}
+					onClick={() => onCreateHtmlFile(id)}
+				>
+					New HTML App
 				</ActionItem>
 			)}
 			{onCreateFolder && (
