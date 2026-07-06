@@ -88,7 +88,9 @@ const supportsAutoUpdates = !isDev && process.platform === "darwin";
 // Check every 4 hours after the initial packaged-app update check.
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
 
-nativeTheme.themeSource = "light";
+// Follow the OS appearance. The renderer mirrors this to a `.dark` class so the
+// class-based Tailwind dark variant and `.dark { … }` token block activate.
+nativeTheme.themeSource = "system";
 
 app.setName(appName);
 if (devAppName) {

@@ -1,5 +1,5 @@
 :root {
-	color-scheme: light;
+	color-scheme: light dark;
 	--brand: oklch(0.426 0.08 159.6);
 	--brand-accent: oklch(0.847 0.168 84.7);
 	--brand-accent-foreground: oklch(0.327 0.051 164.9);
@@ -22,6 +22,31 @@
 	--input: oklch(0.91 0.004 95);
 	--ring: var(--brand-accent);
 	--radius: 0.625rem;
+}
+
+/*
+ * Dark mode. HTML apps render in a sandboxed iframe that still inherits the
+ * host renderer's resolved color scheme, so a media query is the right signal
+ * for system-follow — no host-to-iframe messaging needed. Palette mirrors the
+ * desktop `.dark` block (warm neutrals at hue ~95, Notion-guided).
+ */
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: oklch(0.205 0.004 95);
+		--foreground: oklch(0.945 0.003 95);
+		--card: oklch(0.245 0.005 95);
+		--primary: color-mix(in oklab, var(--brand) 88%, white);
+		--primary-foreground: oklch(0.18 0.004 95);
+		--secondary: oklch(0.285 0.005 95);
+		--muted: oklch(0.275 0.005 95);
+		--muted-foreground: oklch(0.72 0.006 95);
+		--accent: oklch(0.29 0.006 95);
+		--selected: oklch(0.4 0.045 92);
+		--destructive: oklch(0.704 0.191 22.216);
+		--border: oklch(1 0 0 / 10%);
+		--input: oklch(1 0 0 / 14%);
+		--ring: color-mix(in oklab, var(--brand) 68%, white);
+	}
 }
 
 @theme inline {
