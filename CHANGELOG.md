@@ -9,10 +9,13 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 - Add table support. Markdown tables now render as expected, and you can create new tables using `/table`. There are still editing features left to add, like adding and removing rows. Track progress on GitHub: [#99](https://github.com/bholmesdev/hubble.md/issues/99)
+- Create HTML Apps from the new file dropdown, folder menus, and the File menu
+- Empty HTML App files show a setup screen with the skill install command and a ready-to-copy agent prompt, with a check once the skills are detected
 
 ### Changed
 - Keyboard shortcut hints now show the correct keys on Windows and Linux (Ctrl/Alt instead of macOS symbols)
 - More buttons and menus now show their keyboard shortcut, including the format and slash command menus
+- The HTML Apps popup in new workspaces is gone; setup now happens when you create an HTML App
 
 ### Fixed
 - Desktop saves no longer drop trailing content in notes with multibyte characters
