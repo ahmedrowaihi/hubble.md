@@ -1,14 +1,25 @@
 import { Menu } from "@base-ui/react/menu";
-import { Button, Toolbar as SharedToolbar } from "@hubble.md/ui";
+import {
+	Button,
+	formatShortcut,
+	Toolbar as SharedToolbar,
+} from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { type CSSProperties, useEffect, useState } from "react";
 import { toast } from "sonner";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import MingcuteFolderOpenLine from "~icons/mingcute/folder-open-line";
 import MingcuteMore2Line from "~icons/mingcute/more-2-line";
+import MingcuteTerminalLine from "~icons/mingcute/terminal-line";
 import { desktopApi } from "../desktopApi";
+import { copyText } from "../lib/clipboard";
 import { revealFileLabel } from "../lib/revealFile";
-import { renameCurrentMarkdownFile, toggleSidebar } from "../store/actions";
+import {
+	renameCurrentMarkdownFile,
+	requestChatAboutNote,
+	toggleSidebar,
+	toggleTerminal,
+} from "../store/actions";
 import {
 	currentPathStore,
 	sidebarOpenStore,
@@ -54,9 +65,20 @@ export function Toolbar({
 				void renameCurrentMarkdownFile(nextName)
 			}
 			rightSlot={
-				workspacePath && currentPath ? (
-					<NoteActionsMenu path={currentPath} />
-				) : undefined
+				<div className="flex items-center gap-1">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						aria-label="Toggle terminal"
+						title="Toggle terminal"
+						onClick={toggleTerminal}
+					>
+						<MingcuteTerminalLine className="size-3.5" />
+					</Button>
+					{workspacePath && currentPath && (
+						<NoteActionsMenu path={currentPath} />
+					)}
+				</div>
 			}
 		/>
 	);
@@ -72,12 +94,7 @@ function NoteActionsMenu({ path }: { path: string }) {
 	}
 
 	async function copyFilePath() {
-		try {
-			await navigator.clipboard.writeText(path);
-			toast.success("File path copied");
-		} catch {
-			toast.error("Failed to copy file path");
-		}
+		await copyText(path, "File path");
 	}
 
 	return (
@@ -96,7 +113,15 @@ function NoteActionsMenu({ path }: { path: string }) {
 			</Menu.Trigger>
 			<Menu.Portal>
 				<Menu.Positioner align="end" side="bottom" sideOffset={4}>
-					<Menu.Popup className="z-50 w-44 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+					<Menu.Popup className="z-50 w-52 origin-(--transform-origin) rounded-sm border border-border bg-popover p-1 text-[11px] text-popover-foreground outline-hidden transition-[transform,opacity] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+						<Menu.Item
+							className="flex w-full cursor-pointer items-center gap-2 rounded-sm [padding-block:0.375rem] [padding-inline:0.5rem] text-start text-[11px] outline-hidden select-none data-highlighted:bg-accent"
+							onClick={requestChatAboutNote}
+						>
+							<MingcuteTerminalLine className="size-3 shrink-0" />
+							<span className="min-w-0 flex-1">Chat about this note</span>
+							<ShortcutHint>⌘⇧J</ShortcutHint>
+						</Menu.Item>
 						<Menu.Item
 							className="flex w-full cursor-pointer items-center gap-2 rounded-sm [padding-block:0.375rem] [padding-inline:0.5rem] text-start text-[11px] outline-hidden select-none data-highlighted:bg-accent"
 							onClick={() => void revealFile()}
@@ -105,7 +130,7 @@ function NoteActionsMenu({ path }: { path: string }) {
 							<span className="min-w-0 flex-1">
 								{revealFileLabel(desktopApi.platform)}
 							</span>
-							<ShortcutHint>⌘⌥R</ShortcutHint>
+							<ShortcutHint>{formatShortcut("CmdOrCtrl+Alt+R")}</ShortcutHint>
 						</Menu.Item>
 						<Menu.Item
 							className="flex w-full cursor-pointer items-center gap-2 rounded-sm [padding-block:0.375rem] [padding-inline:0.5rem] text-start text-[11px] outline-hidden select-none data-highlighted:bg-accent"
@@ -113,7 +138,7 @@ function NoteActionsMenu({ path }: { path: string }) {
 						>
 							<MingcuteCopy2Line className="size-3 shrink-0" />
 							<span className="min-w-0 flex-1">Copy file path</span>
-							<ShortcutHint>⌘⇧C</ShortcutHint>
+							<ShortcutHint>{formatShortcut("CmdOrCtrl+Shift+C")}</ShortcutHint>
 						</Menu.Item>
 					</Menu.Popup>
 				</Menu.Positioner>

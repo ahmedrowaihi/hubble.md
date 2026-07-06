@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import hubbleRuntime from "@hubble.md/runtime/global.js?raw";
 import htmlAppTheme from "@hubble.md/runtime/html-app-theme.css?raw";
@@ -28,10 +29,12 @@ import type {
 } from "../src/desktopApi/types";
 import {
 	hasDocumentExtension,
+	hasMarkdownExtension,
 	isHiddenSidebarFolderName,
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
+import { setupTerminalIpc } from "./terminal";
 import {
 	loadZoomFactor,
 	resetWindowZoom,
@@ -354,7 +357,16 @@ function resolvePath(input: string): string {
 	if (input.startsWith("~/") || input.startsWith("~\\")) {
 		return path.resolve(app.getPath("home"), input.slice(2));
 	}
-	return path.resolve(input);
+	// Asset and workspace paths can arrive POSIX-style with a leading slash
+	// before the drive letter (e.g. "/C:/notes" from the forward-slash asset
+	// URLs HTML Apps use as their base). On Windows path.resolve would treat
+	// that as drive-relative and prepend the current drive ("C:\C:\notes"),
+	// breaking the granted-scope check, so strip the leading slash first.
+	const normalized =
+		process.platform === "win32"
+			? input.replace(/^[\\/]+([A-Za-z]:)/, "$1")
+			: input;
+	return path.resolve(normalized);
 }
 
 function grantFile(filePath: string) {
@@ -389,6 +401,17 @@ function isIgnoredWorkspacePath(candidatePath: string): boolean {
 }
 
 function toIgnorePath(input: string): string {
+	return input.split(path.sep).join("/");
+}
+
+/**
+ * Paths sent to the renderer always use forward slashes so the UI's path
+ * helpers (relative/absolute joins, prefix checks) stay consistent across
+ * platforms. On Windows the OS-native separator is a backslash, which otherwise
+ * mixes with the forward-slash paths the renderer builds and produces doubled
+ * paths like "C:\\ws/C:/ws/new-file.md".
+ */
+function toRendererPath(input: string): string {
 	return input.split(path.sep).join("/");
 }
 
@@ -473,6 +496,60 @@ async function pathExists(input: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+async function assertGrantedOrConfirmFile(filePath: string): Promise<string> {
+	try {
+		return assertGranted(filePath);
+	} catch {
+		const resolved = resolvePath(filePath);
+		const result = await dialog.showMessageBox(mainWindow ?? undefined, {
+			type: "question",
+			buttons: ["Open", "Cancel"],
+			defaultId: 0,
+			cancelId: 1,
+			message: "Open file outside workspace?",
+			detail: resolved,
+		});
+		if (result.response !== 0) throw new Error("Open cancelled");
+		grantFileWithParent(resolved);
+		return resolved;
+	}
+}
+
+// HUBBLE_SKILL_DIR_NAMES tracks the skill folders in
+// github.com/bholmesdev/hubble-skills and must be updated if those skills are
+// renamed; the /hubble/ substring match is a resilient fallback.
+const HUBBLE_SKILL_DIR_NAMES = ["create-html-app", "embed-html-app"];
+
+async function skillsDirHasHubble(dirPath: string): Promise<boolean> {
+	try {
+		const entries = await fs.readdir(dirPath);
+		return entries.some((name) => {
+			const lower = name.toLocaleLowerCase();
+			return HUBBLE_SKILL_DIR_NAMES.includes(lower) || lower.includes("hubble");
+		});
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Detects Hubble skills across the workspace and the user's global agent
+ * folders. Runs in the main process because the global paths live outside the
+ * renderer's granted file scope. Fast and ENOENT-quiet: every location is probed
+ * in parallel and missing paths resolve to false.
+ */
+async function detectHubbleSkills(workspacePath: unknown): Promise<boolean> {
+	const workspace = typeof workspacePath === "string" ? workspacePath : null;
+	const roots = workspace ? [os.homedir(), workspace] : [os.homedir()];
+	const skillDirs = roots.flatMap((root) => [
+		path.join(root, ".claude", "skills"),
+		path.join(root, ".agents", "skills"),
+	]);
+
+	const results = await Promise.all(skillDirs.map(skillsDirHasHubble));
+	return results.some(Boolean);
 }
 
 function firstExistingFileArg(args: string[]): string | null {
@@ -570,6 +647,35 @@ function responseForAsset(filePath: string) {
 	});
 }
 
+type TextContextMenuItem = {
+	role: "cut" | "copy" | "paste" | "selectAll";
+	flag: keyof Electron.EditFlags;
+};
+
+const textContextMenuItems: TextContextMenuItem[] = [
+	{ role: "cut", flag: "canCut" },
+	{ role: "copy", flag: "canCopy" },
+	{ role: "paste", flag: "canPaste" },
+	{ role: "selectAll", flag: "canSelectAll" },
+];
+
+function buildTextContextMenu(params: Electron.ContextMenuParams) {
+	const template: Electron.MenuItemConstructorOptions[] =
+		textContextMenuItems.map((item) => ({
+			role: item.role,
+			enabled: params.editFlags[item.flag],
+		}));
+
+	return Menu.buildFromTemplate(template);
+}
+
+function registerTextContextMenu(window: BrowserWindow) {
+	window.webContents.on("context-menu", (_event, params) => {
+		if (!params.isEditable) return;
+		buildTextContextMenu(params).popup({ window });
+	});
+}
+
 function buildMenu() {
 	const template: Electron.MenuItemConstructorOptions[] = [
 		{
@@ -580,6 +686,11 @@ function buildMenu() {
 					label: "New File",
 					accelerator: "CmdOrCtrl+N",
 					click: () => sendToRenderer("desktop:menu-create-markdown-file"),
+				},
+				{
+					id: "new-html-file",
+					label: "New HTML App",
+					click: () => sendToRenderer("desktop:menu-create-html-file"),
 				},
 				{
 					id: "new-workspace",
@@ -644,6 +755,14 @@ function buildMenu() {
 					label: "Reset Zoom",
 					accelerator: "CmdOrCtrl+0",
 					click: () => resetWindowZoom(mainWindow),
+				},
+				{ type: "separator" },
+				{
+					id: "toggle-terminal",
+					label: "Toggle Terminal",
+					accelerator: "CmdOrCtrl+J",
+					enabled: menuState.hasWorkspace,
+					click: () => sendToRenderer("desktop:menu-toggle-terminal"),
 				},
 				...(isDev
 					? ([
@@ -848,14 +967,14 @@ async function collectDocumentFiles(
 			if (isHiddenSidebarFolderName(entry.name)) continue;
 			const stat = await fs.stat(entryPath);
 			out.folders.push({
-				path: entryPath,
+				path: toRendererPath(entryPath),
 				modified_at: Math.floor(stat.mtimeMs / 1000),
 			});
 			await collectDocumentFiles(entryPath, out, rules);
 		} else if (isDocumentPath(entry.name)) {
 			const stat = await fs.stat(entryPath);
 			out.files.push({
-				path: entryPath,
+				path: toRendererPath(entryPath),
 				modified_at: Math.floor(stat.mtimeMs / 1000),
 			});
 		}
@@ -941,6 +1060,7 @@ async function createWindow() {
 		},
 	});
 	mainWindow = window;
+	registerTextContextMenu(window);
 	if (windowState.isFullScreen) {
 		window.setFullScreen(true);
 	} else if (windowState.isMaximized) {
@@ -994,6 +1114,8 @@ async function createWindow() {
 }
 
 function registerIpc() {
+	setupTerminalIpc(sendToRenderer);
+
 	ipcMain.handle(
 		"desktop:list-directory",
 		async (_event, { path: dirPath }) => {
@@ -1063,10 +1185,16 @@ function registerIpc() {
 
 	ipcMain.handle(
 		"desktop:write-file-text",
-		async (_event, { path: filePath, content }) => {
+		async (_event, { path: filePath, bytes }) => {
 			const resolved = assertGranted(filePath);
+			if (!Array.isArray(bytes)) {
+				throw new Error("write-file-text requires encoded bytes");
+			}
 			await fs.mkdir(path.dirname(resolved), { recursive: true });
-			await fs.writeFile(resolved, String(content));
+			// Text is encoded in preload. Main only writes bytes so it cannot
+			// accidentally shorten UTF-8 content while crossing string encoders.
+			// See https://github.com/bholmesdev/hubble.md/issues/126 for the repro.
+			await fs.writeFile(resolved, Uint8Array.from(bytes));
 		},
 	);
 
@@ -1091,6 +1219,11 @@ function registerIpc() {
 
 	ipcMain.handle("desktop:path-exists", async (_event, { path: filePath }) =>
 		pathExists(assertGranted(filePath)),
+	);
+
+	ipcMain.handle(
+		"desktop:detect-hubble-skills",
+		async (_event, { workspacePath }) => detectHubbleSkills(workspacePath),
 	);
 
 	ipcMain.handle(
@@ -1199,7 +1332,7 @@ function registerIpc() {
 		});
 		const selected = result.filePaths[0] ?? null;
 		if (selected) grantFileWithParent(selected);
-		return selected;
+		return selected ? toRendererPath(selected) : null;
 	});
 
 	ipcMain.handle("desktop:open-folder-picker", async () => {
@@ -1209,7 +1342,7 @@ function registerIpc() {
 		});
 		const selected = result.filePaths[0] ?? null;
 		if (selected) grantRoot(selected);
-		return selected;
+		return selected ? toRendererPath(selected) : null;
 	});
 
 	ipcMain.handle("desktop:create-folder-picker", async () => {
@@ -1225,7 +1358,7 @@ function registerIpc() {
 			const folderPath = result.filePath;
 			await fs.mkdir(folderPath, { recursive: true });
 			grantRoot(folderPath);
-			return folderPath;
+			return toRendererPath(folderPath);
 		}
 		// Linux/Windows: the native directory picker has a "New Folder" button,
 		// so create + select happen there and the path opens as the workspace.
@@ -1238,7 +1371,7 @@ function registerIpc() {
 		if (!selected) return null;
 		await fs.mkdir(selected, { recursive: true });
 		grantRoot(selected);
-		return selected;
+		return toRendererPath(selected);
 	});
 
 	ipcMain.handle(
@@ -1255,7 +1388,7 @@ function registerIpc() {
 			if (result.canceled || !result.filePath) return null;
 			const selected = withMarkdownExtension(result.filePath);
 			grantFileWithParent(selected);
-			return selected;
+			return toRendererPath(selected);
 		},
 	);
 
@@ -1266,7 +1399,7 @@ function registerIpc() {
 			const resolved = assertGranted(watchPath);
 			const emit = (changedPath: string) => {
 				sendToRenderer(`desktop:watch-path:${watchId}`, [
-					path.resolve(changedPath),
+					toRendererPath(path.resolve(changedPath)),
 				]);
 			};
 
@@ -1312,27 +1445,38 @@ function registerIpc() {
 		await shell.openExternal(url);
 	});
 
+	ipcMain.handle("desktop:open-path-from-link", async (_event, { path }) => {
+		const resolved = await assertGrantedOrConfirmFile(path);
+		if (hasMarkdownExtension(resolved)) {
+			if (!(await pathExistsAsFile(resolved))) {
+				throw new Error("FILE_NOT_FOUND");
+			}
+			return { kind: "markdown", path: toRendererPath(resolved) };
+		}
+		await shell.openPath(resolved);
+		return { kind: "opened" };
+	});
+
 	ipcMain.handle("desktop:reveal-file", (_event, { path: filePath }) => {
 		shell.showItemInFolder(assertGranted(filePath));
 	});
 
 	ipcMain.handle("desktop:resolve-path", (_event, { path }) =>
-		resolvePath(path),
+		toRendererPath(resolvePath(path)),
 	);
 
 	ipcMain.handle("desktop:real-path", async (_event, { path: filePath }) =>
-		fs.realpath(assertGranted(filePath)),
+		toRendererPath(await fs.realpath(assertGranted(filePath))),
 	);
 
 	ipcMain.handle("desktop:get-launch-file-path", () => {
 		const pathToOpen = pendingOpenPath;
 		pendingOpenPath = null;
-		return pathToOpen;
+		return pathToOpen ? toRendererPath(pathToOpen) : null;
 	});
 
-	ipcMain.handle(
-		"desktop:get-launch-workspace-path",
-		() => launchWorkspacePath,
+	ipcMain.handle("desktop:get-launch-workspace-path", () =>
+		launchWorkspacePath ? toRendererPath(launchWorkspacePath) : null,
 	);
 
 	ipcMain.handle("desktop:get-update-state", () => updateState);
@@ -1382,7 +1526,7 @@ if (!singleInstanceLock) {
 		if (mainWindow) {
 			if (mainWindow.isMinimized()) mainWindow.restore();
 			mainWindow.focus();
-			sendToRenderer("desktop:open-file", openPath);
+			sendToRenderer("desktop:open-file", toRendererPath(openPath));
 		}
 	});
 
@@ -1391,7 +1535,7 @@ if (!singleInstanceLock) {
 		const resolved = resolvePath(filePath);
 		grantFileWithParent(resolved);
 		pendingOpenPath = resolved;
-		sendToRenderer("desktop:open-file", resolved);
+		sendToRenderer("desktop:open-file", toRendererPath(resolved));
 	});
 
 	app.whenReady().then(async () => {

@@ -1,7 +1,7 @@
 {
 	"name": "@hubble.md/desktop",
 	"private": true,
-	"version": "0.1.14",
+	"version": "0.1.16",
 	"description": "Desktop app for Hubble.md",
 	"license": "MIT",
 	"author": "Ben Holmes <hey@bholmes.dev>",
@@ -19,6 +19,8 @@
 		"dev:debug": "HUBBLE_DESKTOP_ENABLE_CDP=1 node scripts/dev.mjs",
 		"build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && electron-vite build",
 		"bundle:mac": "pnpm build && electron-builder --mac",
+		"bundle:win": "pnpm build && electron-builder --win nsis --x64",
+		"bundle:win:arm64": "pnpm build && electron-builder --win nsis --arm64",
 		"bundle:linux": "pnpm build && electron-builder --linux",
 		"bundle:linux:arm64": "pnpm build && electron-builder --linux --arm64",
 		"preview": "vite preview",
@@ -39,12 +41,15 @@
 		"@tiptap/pm": "^3.3.0",
 		"@tiptap/react": "^3.3.0",
 		"@tiptap/starter-kit": "^3.3.0",
+		"@xterm/addon-fit": "^0.11.0",
+		"@xterm/xterm": "^6.0.0",
 		"alpinejs": "^3.15.12",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"electron-updater": "^6.8.3",
 		"ignore": "^7.0.5",
 		"keymatch": "^1.0.5",
+		"node-pty": "^1.1.0",
 		"open-props": "^1.7.23",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
@@ -98,6 +103,18 @@
 				"zip"
 			],
 			"category": "public.app-category.productivity"
+		},
+		"win": {
+			"icon": "assets/icon-master-1024.png",
+			"target": [
+				"nsis"
+			]
+		},
+		"nsis": {
+			"oneClick": false,
+			"perMachine": false,
+			"allowToChangeInstallationDirectory": true,
+			"artifactName": "hubble_${version}_${arch}.${ext}"
 		},
 		"linux": {
 			"executableName": "hubble.md",

@@ -23,9 +23,11 @@ import {
 	pathAfterMove,
 	rewriteMovedLinks,
 } from "../lib/markdownLinkRewrite";
+import { DEFAULT_CHAT_COMMAND } from "./settings";
 import {
 	applyFileAction,
 	appStore,
+	chatCommandStore,
 	cleanFileState,
 	emptyDoc,
 	type FileEntry,
@@ -34,17 +36,24 @@ import {
 	isInWorkspace,
 	LOADING_DELAY_MS,
 	MAX_RECENT,
+	pendingTerminalCommandStore,
 	type SortMode,
 	sidebarOpenStore,
 	switcherOpenStore,
+	uiStore,
 	viewerStore,
 	withOpenedDoc,
 	workspaceStore,
 } from "./state";
 
 const REFRESH_FILES_DEBOUNCE_MS = 250;
+const SELF_SAVE_TTL_MS = 5000;
 const missingPathErrorPattern = /\bENOENT\b|\bENOTDIR\b/;
 let refreshFilesTimer: ReturnType<typeof setTimeout> | null = null;
+// The active-file watcher also sees Hubble's own writes. If save A reaches disk
+// after the editor already has draft B, that watcher event is not an external
+// conflict; it is just the disk baseline catching up to a save we started.
+const selfSaves = new Map<string, Map<string, number>>();
 
 type SidebarMoveItem =
 	| { kind: "file"; path: string }
@@ -97,6 +106,41 @@ function handleFileError(err: unknown) {
 	const message = errorMessage(err);
 	refreshFilesAfterMissingPath(message);
 	return message;
+}
+
+function pruneSelfSaves(path: string, now = Date.now()) {
+	const contents = selfSaves.get(path);
+	if (!contents) return;
+	for (const [content, expiresAt] of contents) {
+		if (expiresAt <= now) contents.delete(content);
+	}
+	if (contents.size === 0) selfSaves.delete(path);
+}
+
+function rememberSelfSave(path: string, content: string) {
+	pruneSelfSaves(path);
+	const contents = selfSaves.get(path) ?? new Map<string, number>();
+	contents.set(content, Date.now() + SELF_SAVE_TTL_MS);
+	selfSaves.set(path, contents);
+}
+
+function isSelfSave(path: string, content: string) {
+	pruneSelfSaves(path);
+	return selfSaves.get(path)?.has(content) ?? false;
+}
+
+function selfSaveState(editorContent: string, diskContent: string) {
+	if (editorContent === diskContent) {
+		return cleanFileState(diskContent);
+	}
+	// Keep newer editor text intact while acknowledging that an older self-save
+	// is now the latest content known to be on disk.
+	return {
+		diskContent,
+		externalChange: { kind: "none" as const },
+		status: "ready" as const,
+		error: null,
+	};
 }
 
 function pathStartsWithFolder(filePath: string, folderPath: string): boolean {
@@ -269,11 +313,16 @@ export function touchFile(path: string) {
 	});
 }
 
-function uniqueMarkdownPath(parent: string): string {
+function uniqueFilePath(
+	parent: string,
+	stem: string,
+	extension: string,
+): string {
 	const files = workspaceStore.get().files;
 	const existing = new Set(files.map((file) => file.path.toLocaleLowerCase()));
 	for (let index = 1; ; index++) {
-		const name = index === 1 ? "new-file.md" : `new-file-${index}.md`;
+		const name =
+			index === 1 ? `${stem}${extension}` : `${stem}-${index}${extension}`;
 		const candidate = joinPath(parent, name);
 		if (!existing.has(candidate.toLocaleLowerCase())) return candidate;
 	}
@@ -316,6 +365,30 @@ export function setSidebarOpen(isOpen: boolean) {
 
 export function toggleSidebar() {
 	sidebarOpenStore.set((open) => !open);
+}
+
+export function setTerminalOpen(isOpen: boolean) {
+	uiStore.select("isTerminalOpen").set(isOpen);
+}
+
+export function toggleTerminal() {
+	uiStore.select("isTerminalOpen").set((open) => !open);
+}
+
+export function setChatCommand(command: string) {
+	chatCommandStore.set(command);
+}
+
+export function requestChatAboutNote() {
+	const command = chatCommandStore.get().trim() || DEFAULT_CHAT_COMMAND;
+	// Set the command before opening so the panel's open effect can see it
+	// and defer to the chat launch instead of starting a plain session.
+	pendingTerminalCommandStore.set(command);
+	uiStore.select("isTerminalOpen").set(true);
+}
+
+export function clearPendingTerminalCommand() {
+	uiStore.set((state) => ({ ...state, pendingTerminalCommand: null }));
 }
 
 export function clearViewer() {
@@ -412,17 +485,27 @@ export async function savePathContent(
 			const currentDiskContent = await desktopApi.readFileText(path);
 			const nextCurrent = viewerStore.get();
 			if (nextCurrent.currentPath !== path) return;
-			const action = classifyFileChange({
-				editorContent: nextCurrent.content,
-				baseline: getBaseline(nextCurrent),
-				diskContent: currentDiskContent,
-			});
-			if (action !== "none") {
+			if (isSelfSave(path, currentDiskContent)) {
 				viewerStore.set((state) => {
 					if (state.currentPath !== path) return state;
-					return applyFileAction(state, currentDiskContent, action);
+					return {
+						...state,
+						...selfSaveState(state.content, currentDiskContent),
+					};
 				});
-				return;
+			} else {
+				const action = classifyFileChange({
+					editorContent: nextCurrent.content,
+					baseline: getBaseline(nextCurrent),
+					diskContent: currentDiskContent,
+				});
+				if (action !== "none") {
+					viewerStore.set((state) => {
+						if (state.currentPath !== path) return state;
+						return applyFileAction(state, currentDiskContent, action);
+					});
+					return;
+				}
 			}
 		} catch {
 			// Fall through to the write path if the file cannot be read during preflight.
@@ -430,7 +513,9 @@ export async function savePathContent(
 	}
 
 	try {
+		rememberSelfSave(path, content);
 		await desktopApi.writeFileText(path, content);
+		rememberSelfSave(path, content);
 		touchFile(path);
 		viewerStore.set((state) => {
 			if (state.currentPath !== path) return state;
@@ -770,8 +855,21 @@ export async function moveSidebarItem(
 	}
 }
 
-export async function createMarkdownFileInFolder(parentPath: string) {
-	const path = uniqueMarkdownPath(parentPath);
+export async function moveSidebarItems(
+	items: SidebarMoveItem[],
+	targetFolderPath: string,
+) {
+	for (const item of items) {
+		await moveSidebarItem(item, targetFolderPath);
+	}
+}
+
+async function createEmptyFileInFolder(
+	parentPath: string,
+	stem: string,
+	extension: string,
+) {
+	const path = uniqueFilePath(parentPath, stem, extension);
 	try {
 		await desktopApi.writeFileText(path, "");
 		const modified_at = Math.floor(Date.now() / 1000);
@@ -787,6 +885,14 @@ export async function createMarkdownFileInFolder(parentPath: string) {
 		toast.error("Failed to create file", { description: message });
 		return null;
 	}
+}
+
+export function createMarkdownFileInFolder(parentPath: string) {
+	return createEmptyFileInFolder(parentPath, "new-file", ".md");
+}
+
+export function createHtmlFileInFolder(parentPath: string) {
+	return createEmptyFileInFolder(parentPath, "new-app", ".html");
 }
 
 export async function createFolderInFolder(parentPath: string) {
@@ -902,6 +1008,12 @@ export function handleExternalFileChange(
 ) {
 	viewerStore.set((state) => {
 		if (state.currentPath !== path) return state;
+		if (isSelfSave(path, nextDiskContent)) {
+			return {
+				...state,
+				...selfSaveState(state.content, nextDiskContent),
+			};
+		}
 		const action = classifyFileChange({
 			editorContent: state.content,
 			baseline: getBaseline(state),

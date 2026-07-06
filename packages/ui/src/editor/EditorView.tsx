@@ -1,6 +1,7 @@
 import {
 	combineMarkdownFrontMatter,
 	FakeSelectionExtension,
+	FindExtension,
 	HeadingExtension,
 	LinkExtension,
 	listExtensions,
@@ -12,6 +13,10 @@ import {
 } from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
 import { TaskItem } from "@tiptap/extension-list";
+import { Table } from "@tiptap/extension-table";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableRow } from "@tiptap/extension-table-row";
 import {
 	EditorContent,
 	type EditorOptions,
@@ -26,18 +31,25 @@ import { LinkCreationGhostExtension } from "./LinkCreationGhostExtension";
 import { LinkPopover, type WikiTarget } from "./LinkPopover";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { SmartLinkExtension } from "./SmartLinkExtension";
+import { TableCellSelectionExtension } from "./TableCellSelectionExtension";
 import { VirtualCursor } from "./VirtualCursor";
 import "./EditorView.css";
 import {
 	FilePropertiesPanel,
 	frontMatterStateFromMarkdown,
 } from "./FilePropertiesPanel";
+import { FindBar } from "./FindBar";
 import { FormatCommandMenu } from "./FormatCommandMenu";
 import { FormattingStatusBar } from "./FormattingStatusBar";
 import { SelectionFormattingToolbar } from "./SelectionFormattingToolbar";
 import type { VirtualCursorMode } from "./virtualCursorMode";
 
 const DEFAULT_SAVE_DEBOUNCE_MS = 120;
+
+// Markdown table cells should not hold block content, so cells allow exactly one
+// paragraph (line breaks serialize as <br>)
+const InlineTableCell = TableCell.extend({ content: "paragraph" });
+const InlineTableHeader = TableHeader.extend({ content: "paragraph" });
 
 export type { WikiTarget };
 
@@ -138,12 +150,18 @@ export function EditorView({
 			LinkClickExtension.configure({ onOpenExternalLink, onOpenWikiLink }),
 			LinkCreationGhostExtension,
 			FakeSelectionExtension,
+			FindExtension,
 			HeadingExtension,
 			MarkdownRolloverExtension,
 			StrikethroughShortcutExtension,
 			...listExtensions,
 			...extensions,
 			TaskItem.configure({ nested: true }),
+			Table.configure({ resizable: true }),
+			TableRow,
+			InlineTableHeader,
+			InlineTableCell,
+			TableCellSelectionExtension,
 		],
 		content: initialDoc,
 		onUpdate: ({ editor: current }) => {
@@ -286,6 +304,7 @@ export function EditorView({
 				/>
 				<FormatCommandMenu editor={editor} viewportRef={editorViewportRef} />
 			</div>
+			<FindBar editor={editor} />
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
 		</div>
 	);

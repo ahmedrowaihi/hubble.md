@@ -52,6 +52,40 @@ describe("desktop savePathContent", () => {
 		vi.unstubAllGlobals();
 	});
 
+	it("hydrates the default chat command and persists edits", async () => {
+		const api = createDesktopApi();
+		const { chatCommandStore, setChatCommand } = await loadStoreActions(api);
+		const { STORAGE_KEY } = await import("./persistence");
+		const { DEFAULT_CHAT_COMMAND } = await import("./settings");
+
+		expect(chatCommandStore.get()).toBe(DEFAULT_CHAT_COMMAND);
+
+		setChatCommand("codex exec");
+
+		expect(chatCommandStore.get()).toBe("codex exec");
+		expect(localStorage.setItem).toHaveBeenLastCalledWith(
+			STORAGE_KEY,
+			expect.stringContaining('"chatCommand":"codex exec"'),
+		);
+	});
+
+	it("requests chat with the default command when the setting is blank", async () => {
+		const api = createDesktopApi();
+		const {
+			appStore,
+			requestChatAboutNote,
+			setChatCommand,
+			pendingTerminalCommandStore,
+		} = await loadStoreActions(api);
+		const { DEFAULT_CHAT_COMMAND } = await import("./settings");
+
+		setChatCommand("   ");
+		requestChatAboutNote();
+
+		expect(appStore.get().ui.isTerminalOpen).toBe(true);
+		expect(pendingTerminalCommandStore.get()).toBe(DEFAULT_CHAT_COMMAND);
+	});
+
 	it("preserves newer editor content when an older save finishes", async () => {
 		const api = createDesktopApi();
 		let finishWrite: () => void = () => {};
@@ -86,6 +120,57 @@ describe("desktop savePathContent", () => {
 		expect(api.writeFileText).toHaveBeenCalledWith(path, "draft 1");
 
 		updateEditorContent(path, "draft 2");
+		finishWrite();
+		await save;
+
+		expect(viewerStore.get().content).toBe("draft 2");
+		expect(viewerStore.get().diskContent).toBe("draft 1");
+		expect(viewerStore.get().externalChange).toEqual({ kind: "none" });
+	});
+
+	it("does not treat an in-flight self-save watcher event as an external conflict", async () => {
+		const api = createDesktopApi();
+		let finishWrite: () => void = () => {};
+		api.writeFileText.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishWrite = resolve;
+				}),
+		);
+		const {
+			appStore,
+			handleExternalFileChange,
+			savePathContent,
+			updateEditorContent,
+			viewerStore,
+		} = await loadStoreActions(api);
+		const path = "/workspace/note.md";
+
+		appStore.set((current) => ({
+			...current,
+			document: {
+				...current.document,
+				currentPath: path,
+				lastOpenedPath: path,
+				content: "draft 1",
+				diskContent: "before",
+				externalChange: { kind: "none" },
+				status: "ready",
+				error: null,
+			},
+		}));
+
+		const save = savePathContent(path, "draft 1");
+		await Promise.resolve();
+		expect(api.writeFileText).toHaveBeenCalledWith(path, "draft 1");
+
+		updateEditorContent(path, "draft 2");
+		handleExternalFileChange(path, "draft 1");
+
+		expect(viewerStore.get().content).toBe("draft 2");
+		expect(viewerStore.get().diskContent).toBe("draft 1");
+		expect(viewerStore.get().externalChange).toEqual({ kind: "none" });
+
 		finishWrite();
 		await save;
 

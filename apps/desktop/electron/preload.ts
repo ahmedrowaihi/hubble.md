@@ -30,8 +30,17 @@ const desktopApi = {
 		}),
 	readFileText: (path) =>
 		ipcRenderer.invoke("desktop:read-file-text", { path }),
-	writeFileText: (path, content) =>
-		ipcRenderer.invoke("desktop:write-file-text", { path, content }),
+	detectHubbleSkills: (workspacePath) =>
+		ipcRenderer.invoke("desktop:detect-hubble-skills", { workspacePath }),
+	writeFileText: (path, content) => {
+		// Encode in the renderer before IPC. Main should write these bytes as-is,
+		// because re-encoding the string there has truncated multibyte characters.
+		const bytes = Array.from(new TextEncoder().encode(String(content)));
+		return ipcRenderer.invoke("desktop:write-file-text", {
+			path,
+			bytes,
+		});
+	},
 	createFolder: (path) => ipcRenderer.invoke("desktop:create-folder", { path }),
 	renameFile: (fromPath, toPath) =>
 		ipcRenderer.invoke("desktop:rename-file", { fromPath, toPath }),
@@ -64,6 +73,8 @@ const desktopApi = {
 	},
 	openExternalUrl: (url) =>
 		ipcRenderer.invoke("desktop:open-external-url", { url }),
+	openPathFromLink: (path) =>
+		ipcRenderer.invoke("desktop:open-path-from-link", { path }),
 	revealFile: (path) => ipcRenderer.invoke("desktop:reveal-file", { path }),
 	resolvePath: (path) => ipcRenderer.invoke("desktop:resolve-path", { path }),
 	realPath: (path) => ipcRenderer.invoke("desktop:real-path", { path }),
@@ -83,6 +94,8 @@ const desktopApi = {
 		subscribe("desktop:update-state", callback),
 	onMenuCreateMarkdownFile: (callback) =>
 		subscribe("desktop:menu-create-markdown-file", callback),
+	onMenuCreateHtmlFile: (callback) =>
+		subscribe("desktop:menu-create-html-file", callback),
 	onMenuOpenFile: (callback) => subscribe("desktop:menu-open-file", callback),
 	onMenuOpenFolder: (callback) =>
 		subscribe("desktop:menu-open-folder", callback),
@@ -92,11 +105,31 @@ const desktopApi = {
 		subscribe("desktop:menu-show-workspace-switcher", callback),
 	onMenuSyncWorkspace: (callback) =>
 		subscribe("desktop:menu-sync-workspace", callback),
+	onMenuToggleTerminal: (callback) =>
+		subscribe("desktop:menu-toggle-terminal", callback),
 	onWindowFocus: (callback) => subscribe("desktop:window-focus", callback),
 	onFullScreenChange: (callback) =>
 		subscribe("desktop:fullscreen-change", (isFullScreen: boolean) =>
 			callback(isFullScreen),
 		),
+	terminalStart: (cwd, options) =>
+		ipcRenderer.invoke("desktop:terminal-start", { cwd, ...options }),
+	terminalWrite: (sessionId, data) =>
+		ipcRenderer.invoke("desktop:terminal-write", { sessionId, data }),
+	terminalResize: (sessionId, cols, rows) =>
+		ipcRenderer.invoke("desktop:terminal-resize", { sessionId, cols, rows }),
+	terminalStop: (sessionId) =>
+		ipcRenderer.invoke("desktop:terminal-stop", { sessionId }),
+	onTerminalData: (sessionId, callback) => {
+		const unsubscribe = subscribe(
+			`desktop:terminal-data-${sessionId}`,
+			callback,
+		);
+		void ipcRenderer.invoke("desktop:terminal-subscribe", { sessionId });
+		return unsubscribe;
+	},
+	onTerminalExit: (sessionId, callback) =>
+		subscribe(`desktop:terminal-exit-${sessionId}`, callback),
 } satisfies DesktopApi;
 
 contextBridge.exposeInMainWorld("desktopApi", desktopApi);
