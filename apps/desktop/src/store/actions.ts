@@ -269,11 +269,16 @@ export function touchFile(path: string) {
 	});
 }
 
-function uniqueMarkdownPath(parent: string): string {
+function uniqueFilePath(
+	parent: string,
+	stem: string,
+	extension: string,
+): string {
 	const files = workspaceStore.get().files;
 	const existing = new Set(files.map((file) => file.path.toLocaleLowerCase()));
 	for (let index = 1; ; index++) {
-		const name = index === 1 ? "new-file.md" : `new-file-${index}.md`;
+		const name =
+			index === 1 ? `${stem}${extension}` : `${stem}-${index}${extension}`;
 		const candidate = joinPath(parent, name);
 		if (!existing.has(candidate.toLocaleLowerCase())) return candidate;
 	}
@@ -779,8 +784,12 @@ export async function moveSidebarItems(
 	}
 }
 
-export async function createMarkdownFileInFolder(parentPath: string) {
-	const path = uniqueMarkdownPath(parentPath);
+async function createEmptyFileInFolder(
+	parentPath: string,
+	stem: string,
+	extension: string,
+) {
+	const path = uniqueFilePath(parentPath, stem, extension);
 	try {
 		await desktopApi.writeFileText(path, "");
 		const modified_at = Math.floor(Date.now() / 1000);
@@ -796,6 +805,14 @@ export async function createMarkdownFileInFolder(parentPath: string) {
 		toast.error("Failed to create file", { description: message });
 		return null;
 	}
+}
+
+export function createMarkdownFileInFolder(parentPath: string) {
+	return createEmptyFileInFolder(parentPath, "new-file", ".md");
+}
+
+export function createHtmlFileInFolder(parentPath: string) {
+	return createEmptyFileInFolder(parentPath, "new-app", ".html");
 }
 
 export async function createFolderInFolder(parentPath: string) {

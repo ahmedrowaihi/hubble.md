@@ -6,11 +6,12 @@ import {
 } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import type { ReactNode } from "react";
-import { toast } from "sonner";
 import { desktopApi } from "../desktopApi";
+import { copyText } from "../lib/clipboard";
 import { revealFileLabel } from "../lib/revealFile";
 import {
 	createFolderInFolder,
+	createHtmlFileInFolder,
 	createMarkdownFileInFolder,
 	deleteFolder,
 	deleteMarkdownFile,
@@ -81,14 +82,7 @@ export function Sidebar({
 			? `${workspacePath}${normalized}`
 			: `${workspacePath}/${normalized}`;
 	};
-	const copyFilePath = async (path: string) => {
-		try {
-			await navigator.clipboard.writeText(path);
-			toast.success("File path copied");
-		} catch {
-			toast.error("Failed to copy file path");
-		}
-	};
+	const copyFilePath = (path: string) => copyText(path, "File path");
 
 	return (
 		<SharedSidebar
@@ -137,6 +131,9 @@ export function Sidebar({
 			onTogglePinnedFile={(path) => void togglePinnedNote(path)}
 			onCreateFile={(folderId) =>
 				createMarkdownFileInFolder(absolutePath(folderId))
+			}
+			onCreateHtmlFile={(folderId) =>
+				createHtmlFileInFolder(absolutePath(folderId))
 			}
 			onCreateFolder={(folderId) =>
 				createFolderInFolder(absolutePath(folderId))
