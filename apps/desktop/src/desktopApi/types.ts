@@ -40,6 +40,7 @@ export type Unsubscribe = () => void;
 
 export type MenuState = {
 	hasWorkspace: boolean;
+	isSourceMode: boolean;
 };
 
 export type DesktopUpdateStatus =

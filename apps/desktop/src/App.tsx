@@ -192,8 +192,11 @@ function App() {
 	}, []);
 
 	useEffect(() => {
-		void desktopApi.setMenuState({ hasWorkspace });
-	}, [hasWorkspace]);
+		void desktopApi.setMenuState({
+			hasWorkspace,
+			isSourceMode: state.viewMode === "source",
+		});
+	}, [hasWorkspace, state.viewMode]);
 
 	useEffect(() => {
 		if (!sidebarOpen) setFocusedSidebarPath(null);

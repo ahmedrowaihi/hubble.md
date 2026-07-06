@@ -25,6 +25,7 @@ import { z } from "zod/v4";
 import type {
 	DesktopUpdateState,
 	DirectoryListing,
+	MenuState,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -49,10 +50,6 @@ type HtmlAppFileEntry = {
 	path: string;
 	modified_at: number;
 	size: number;
-};
-
-type MenuState = {
-	hasWorkspace: boolean;
 };
 
 type IgnoreRule = {
@@ -112,7 +109,10 @@ const launchWorkspacePath =
 	isDev && process.env.HUBBLE_DESKTOP_DEV_WORKSPACE
 		? resolvePath(process.env.HUBBLE_DESKTOP_DEV_WORKSPACE)
 		: null;
-let menuState: MenuState = { hasWorkspace: false };
+let menuState: MenuState = {
+	hasWorkspace: false,
+	isSourceMode: false,
+};
 let updateState: DesktopUpdateState = {
 	isSupported: supportsAutoUpdates,
 	status: "idle",
@@ -680,8 +680,17 @@ function buildTextContextMenu(
 	webContents: Electron.WebContents,
 	params: Electron.ContextMenuParams,
 ) {
-	const template: Electron.MenuItemConstructorOptions[] =
-		textContextMenuItems.map((item) =>
+	// In source mode the text is already markdown, so plain copy covers it.
+	const template: Electron.MenuItemConstructorOptions[] = textContextMenuItems
+		.filter(
+			(item) =>
+				!(
+					menuState.isSourceMode &&
+					"id" in item &&
+					item.id === "copy-as-markdown"
+				),
+		)
+		.map((item) =>
 			"role" in item
 				? {
 						role: item.role,
@@ -765,6 +774,7 @@ function buildMenu() {
 					id: "copy-as-markdown",
 					label: "Copy as Markdown",
 					accelerator: "Alt+CmdOrCtrl+C",
+					enabled: !menuState.isSourceMode,
 					click: () => sendToRenderer("desktop:menu-copy-as-markdown"),
 				},
 				{ role: "paste" },
@@ -1534,7 +1544,10 @@ function registerIpc() {
 	});
 
 	ipcMain.handle("desktop:set-menu-state", (_event, state: MenuState) => {
-		menuState = { hasWorkspace: state.hasWorkspace === true };
+		menuState = {
+			hasWorkspace: state.hasWorkspace === true,
+			isSourceMode: state.isSourceMode === true,
+		};
 		buildMenu();
 	});
 }
