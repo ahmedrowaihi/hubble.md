@@ -1,6 +1,6 @@
 # Changelog
 
-All notable user-facing changes to Hubble. Entries are written as work lands
+All notable user-facing changes to Sudomd. Entries are written as work lands
 (see the `changelog` skill), then harvested into the desktop release notes.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com).
@@ -49,17 +49,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 - You can now adjust the window zoom with `⌘=/⌘-/⌘0`
 
 ### Changed
-- Sidebar folders now reflect real workspace directories, including empty folders, while hiding Hubble-owned config and asset folders
+- Sidebar folders now reflect real workspace directories, including empty folders, while hiding Sudomd-owned config and asset folders
 
 ### Fixed
-- App title now always shows Hubble instead of the starter template name
+- App title now always shows Sudomd instead of the starter template name
 - Top bar no longer reserves empty space for the traffic lights in fullscreen
 
 ## [0.1.12] - 2026-06-23
 
 ### Changed
 - New app icon
-- Lowercase hubble wordmark on the welcome screen
+- Lowercase sudomd wordmark on the welcome screen
 
 ### Fixed
 - Pressing Enter at the end of a link no longer carries the link onto the next line
@@ -70,8 +70,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 - HTML Apps: view and run interactive HTML apps directly in the editor
 - File APIs so HTML apps can read and write workspace files
 - First-run onboarding with an HTML Apps callout
-- Hubble now remembers your window size and position between launches
-- Web homepage at hubble.md
+- Sudomd now remembers your window size and position between launches
+- Web homepage at sudomd
 
 ### Changed
 - Refreshed the desktop app icon

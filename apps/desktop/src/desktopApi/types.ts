@@ -63,6 +63,67 @@ export type WorkspaceConfig = {
 	pinnedNotes: string[];
 };
 
+export type AiPermissionMode = "default" | "plan" | "acceptEdits";
+export type AiPermissionDecision = "allow" | "allow-always" | "deny";
+
+export type AiChatEvent =
+	| { type: "text"; text: string }
+	| { type: "thinking"; text: string }
+	| { type: "tool"; id: string; name: string; input: unknown }
+	| {
+			type: "tool-result";
+			toolUseId: string;
+			content: string;
+			isError: boolean;
+	  }
+	| { type: "permission"; id: string; toolName: string; input: unknown }
+	| { type: "done"; sessionId: string | null; costUsd: number | null }
+	| { type: "error"; message: string };
+
+export type AiChatSendInput = {
+	prompt: string;
+	cwd: string;
+	credential: string;
+	mode: AiPermissionMode;
+	sessionId?: string | null;
+	forkSession?: boolean;
+};
+
+export type BasecampComment = {
+	author: string;
+	date: string;
+	html: string;
+};
+
+export type BasecampFetchResult = {
+	ok: boolean;
+	title?: string;
+	html?: string;
+	comments?: BasecampComment[];
+	error?: string;
+};
+
+export type BasecampSearchItem = {
+	id: number;
+	title: string;
+	type: string;
+	url: string;
+	projectName?: string;
+	creatorName?: string;
+	commentsCount?: number;
+	parent?: { id: number; title: string; type: string; url: string };
+};
+
+export type BasecampSearchResult =
+	| { ok: true; items: BasecampSearchItem[] }
+	| { ok: false; error: string };
+
+export type AiChatHandle = {
+	done: Promise<void>;
+	cancel: () => void;
+	replyPermission: (id: string, decision: AiPermissionDecision) => void;
+};
+
 export type DesktopApi = {
 	platform: DesktopPlatform;
 	homeDir: string;
@@ -119,6 +180,14 @@ export type DesktopApi = {
 	onMenuOpenFolder(callback: () => void): Unsubscribe;
 	onMenuOpenSettings(callback: () => void): Unsubscribe;
 	onMenuShowWorkspaceSwitcher(callback: () => void): Unsubscribe;
+	onMenuShowShortcuts(callback: () => void): Unsubscribe;
+	sendAiChat(
+		input: AiChatSendInput,
+		onEvent: (event: AiChatEvent) => void,
+	): AiChatHandle;
+	fetchBasecamp(url: string): Promise<BasecampFetchResult>;
+	searchBasecamp(query: string): Promise<BasecampSearchResult>;
+	setNativeTheme(source: "light" | "dark" | "system"): Promise<void>;
 	onMenuSyncWorkspace(callback: () => void): Unsubscribe;
 	onWindowFocus(callback: () => void): Unsubscribe;
 	onFullScreenChange(callback: (isFullScreen: boolean) => void): Unsubscribe;

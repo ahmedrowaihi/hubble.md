@@ -1,9 +1,9 @@
-import { Button, Modal } from "@hubble.md/ui";
+import { Button, Modal } from "@sudomd/ui";
 import { toast } from "sonner";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
 import { desktopApi } from "../desktopApi";
 
-const SKILLS_COMMAND = "npx skills add bholmesdev/hubble-skills";
+const SKILLS_COMMAND = "npx skills add ahmedrowaihi/sudomd-skills";
 
 /** Replaces the home dir prefix with ~ for a friendlier path. */
 function toTildePath(absPath: string, homeDir: string): string {
@@ -46,7 +46,7 @@ export function SidebarHtmlAppsCallout({
 				<div className="flex flex-col gap-1">
 					<p className="text-[11px] text-foreground">
 						<span className="font-semibold">Turn notes into HTML Apps.</span>{" "}
-						Install Hubble skills for your agents to build live views from your
+						Install Sudomd skills for your agents to build live views from your
 						notes.
 					</p>
 				</div>
@@ -99,7 +99,7 @@ export function HtmlAppsDialog({
 					<p className="text-xs text-foreground">
 						Turn your notes into <strong>live, interactive apps.</strong>{" "}
 						Install the skills, then tell your coding agent what app you want to
-						build. You can view the app directly in Hubble with live reloading.
+						build. You can view the app directly in Sudomd with live reloading.
 					</p>
 					<div className="flex items-start gap-2 rounded-sm border border-border bg-muted/40 p-2">
 						<code className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-xs text-foreground">

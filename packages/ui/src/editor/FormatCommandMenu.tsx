@@ -1,3 +1,4 @@
+import { tiptapDocToMarkdown } from "@sudomd/editor";
 import type { Editor } from "@tiptap/core";
 import { Command } from "cmdk";
 import { keymatch } from "keymatch";
@@ -11,7 +12,9 @@ import {
 } from "react";
 import MingcuteBoldLine from "~icons/mingcute/bold-line";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
+import MingcuteBrushLine from "~icons/mingcute/brush-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteClipboardLine from "~icons/mingcute/clipboard-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -39,7 +42,9 @@ type FormatCommandKind =
 	| "bold"
 	| "italic"
 	| "strike"
-	| "link";
+	| "highlight"
+	| "link"
+	| "copyBasecamp";
 
 type FormatCommand = {
 	kind: FormatCommandKind;
@@ -153,6 +158,14 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 		group: "Inline",
 	},
 	{
+		kind: "highlight",
+		title: "Highlight",
+		description: "Toggle highlight",
+		aliases: ["mark", "==", "marker"],
+		icon: MingcuteBrushLine,
+		group: "Inline",
+	},
+	{
 		kind: "link",
 		title: "Link",
 		description: "Add or edit link",
@@ -160,7 +173,18 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 		icon: MingcuteLinkLine,
 		group: "Inline",
 	},
+	{
+		kind: "copyBasecamp",
+		title: "Copy for Basecamp",
+		description: "Copy the selection as Basecamp rich text",
+		aliases: ["basecamp", "export", "clipboard"],
+		icon: MingcuteClipboardLine,
+		group: "Inline",
+	},
 ];
+
+/** Dispatched with `detail: { markdown }` when the user copies a selection for Basecamp. */
+export const COPY_FOR_BASECAMP_EVENT = "sudomd:copy-for-basecamp";
 
 export function FormatCommandMenu({
 	editor,
@@ -399,6 +423,7 @@ function isFormatActive(editor: Editor, kind: FormatCommandKind) {
 		case "link":
 			return editor.isActive("link");
 		case "divider":
+		case "copyBasecamp":
 			return false;
 	}
 }
@@ -443,9 +468,22 @@ function applyFormatCommand(editor: Editor, kind: FormatCommandKind) {
 		case "strike":
 			chain.toggleStrike().run();
 			return;
+		case "highlight":
+			chain.toggleHighlight().run();
+			return;
 		case "link":
 			editor.commands.focus(undefined, { scrollIntoView: false });
 			editor.commands.toggleLinkAtSelection();
 			return;
+		case "copyBasecamp": {
+			const slice = editor.state.selection.content();
+			const json = slice.content.toJSON();
+			const content = Array.isArray(json) ? json : json ? [json] : [];
+			const markdown = tiptapDocToMarkdown({ type: "doc", content });
+			window.dispatchEvent(
+				new CustomEvent(COPY_FOR_BASECAMP_EVENT, { detail: { markdown } }),
+			);
+			return;
+		}
 	}
 }

@@ -12,7 +12,9 @@ export type SlashCommandKind =
 	| "taskList"
 	| "blockquote"
 	| "divider"
-	| "strike";
+	| "strike"
+	| "table"
+	| "link";
 
 export type SlashToken = {
 	from: number;
@@ -66,6 +68,20 @@ export function applySlashCommand(
 		);
 		view.dispatch(tr.scrollIntoView());
 		view.focus();
+		return;
+	}
+	if (kind === "table") {
+		view.dispatch(state.tr.delete(token.from, token.to));
+		editor
+			.chain()
+			.focus()
+			.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+			.run();
+		return;
+	}
+	if (kind === "link") {
+		view.dispatch(state.tr.delete(token.from, token.to));
+		editor.commands.toggleLinkAtSelection();
 		return;
 	}
 	const canConvertInPlace =
@@ -174,6 +190,8 @@ function createEmptyBlock(
 		case "divider":
 			return horizontalRule.create();
 		case "strike":
+		case "table":
+		case "link":
 			return null;
 	}
 }

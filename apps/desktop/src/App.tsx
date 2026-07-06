@@ -1,13 +1,25 @@
-import { wikiDisplayNameForTarget } from "@hubble.md/editor";
-import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
+import { wikiDisplayNameForTarget } from "@sudomd/editor";
+import {
+	Button,
+	COPY_FOR_BASECAMP_EVENT,
+	EditorView,
+	type WikiTarget,
+} from "@sudomd/ui";
 import { keymatch } from "keymatch";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import MingcuteSparklesLine from "~icons/mingcute/sparkles-line";
+import { AiSettingsSection } from "./components/AiSettingsSection";
+import { AppearanceSection } from "./components/AppearanceSection";
+import { BacklinksPanel } from "./components/BacklinksPanel";
+import { ChatPanel } from "./components/ChatPanel";
 import {
 	HtmlAppsDialog,
 	SidebarHtmlAppsCallout,
 } from "./components/HtmlAppsCallout";
+import { KeyboardShortcutsModal } from "./components/KeyboardShortcutsModal";
+import { QuickSwitcher } from "./components/QuickSwitcher";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
@@ -23,8 +35,9 @@ import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { IframeView, toAssetUrl } from "./editor/IframeView";
 import { createImageExtension } from "./editor/ImageExtension";
 import { createMarkdownFile } from "./fileActions";
+import { copyDocumentForBasecamp } from "./lib/basecampClipboard";
 import { hasHtmlExtension, relativeWorkspacePath } from "./lib/filePath";
-import { hasHubbleSkillsInstalled } from "./lib/hubbleSkills";
+import { hasSudomdSkillsInstalled } from "./lib/sudomdSkills";
 import { resolveWikiPath } from "./lib/wikiPath";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
@@ -60,7 +73,7 @@ const HMR_REV = (() => {
 })();
 
 const HTML_APPS_CALLOUT_DISMISSED_PREFIX =
-	"hubble:html-apps-callout-dismissed:";
+	"sudomd:html-apps-callout-dismissed:";
 
 function isHtmlAppsCalloutDismissed(workspacePath: string) {
 	return Boolean(
@@ -101,6 +114,9 @@ function App() {
 	const [scrollContainerEl, setScrollContainerEl] =
 		useState<HTMLDivElement | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [shortcutsOpen, setShortcutsOpen] = useState(false);
+	const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+	const [chatOpen, setChatOpen] = useState(false);
 	const [updateState, setUpdateState] = useState<DesktopUpdateState | null>(
 		null,
 	);
@@ -121,7 +137,7 @@ function App() {
 		setHtmlAppsCalloutVisible(false);
 	}, [workspacePath]);
 
-	// Show the HTML Apps callout when a folder is open, the Hubble skills are
+	// Show the HTML Apps callout when a folder is open, the Sudomd skills are
 	// not installed there, and it has not been dismissed for that folder.
 	useEffect(() => {
 		if (!workspacePath || isHtmlAppsCalloutDismissed(workspacePath)) {
@@ -129,7 +145,7 @@ function App() {
 			return;
 		}
 		let active = true;
-		void hasHubbleSkillsInstalled(workspacePath).then((installed) => {
+		void hasSudomdSkillsInstalled(workspacePath).then((installed) => {
 			if (active) setHtmlAppsCalloutVisible(!installed);
 		});
 		return () => {
@@ -225,8 +241,36 @@ function App() {
 	}, [sidebarOpen]);
 
 	useEffect(() => {
+		const handleCopy = (event: Event) => {
+			const markdown = (event as CustomEvent<{ markdown?: string }>).detail
+				?.markdown;
+			if (!markdown) return;
+			void copyDocumentForBasecamp(markdown)
+				.then(({ diagramCount }) =>
+					toast.success("Selection copied for Basecamp", {
+						description:
+							diagramCount > 0
+								? "Paste into Basecamp, then copy each diagram image from its preview."
+								: "Paste into a Basecamp document, message, or comment.",
+					}),
+				)
+				.catch(() => toast.error("Failed to copy for Basecamp"));
+		};
+		window.addEventListener(COPY_FOR_BASECAMP_EVENT, handleCopy);
+		return () =>
+			window.removeEventListener(COPY_FOR_BASECAMP_EVENT, handleCopy);
+	}, []);
+
+	useEffect(() => {
 		const onKeyDown = async (event: KeyboardEvent) => {
-			if (keymatch(event, "CmdOrCtrl+N")) {
+			if (keymatch(event, "CmdOrCtrl+P")) {
+				if (!workspaceStore.get().workspacePath) return;
+				event.preventDefault();
+				setQuickSwitcherOpen(true);
+			} else if (keymatch(event, "CmdOrCtrl+L")) {
+				event.preventDefault();
+				setChatOpen((value) => !value);
+			} else if (keymatch(event, "CmdOrCtrl+N")) {
 				event.preventDefault();
 				await createMarkdownFile();
 			} else if (keymatch(event, "CmdOrCtrl+,")) {
@@ -298,6 +342,7 @@ function App() {
 				setWorkspaceSwitcherOpen(true),
 			),
 			desktopApi.onMenuSyncWorkspace(() => void refreshFiles()),
+			desktopApi.onMenuShowShortcuts(() => setShortcutsOpen(true)),
 		];
 		return () => {
 			for (const dispose of disposers) dispose();
@@ -413,8 +458,30 @@ function App() {
 						</div>
 					)}
 				</section>
+				<ChatPanel
+					open={chatOpen}
+					onOpenChange={setChatOpen}
+					onOpenSettings={() => {
+						setChatOpen(false);
+						openSettings();
+						toast.info("Add your Claude credential to use the assistant");
+					}}
+				/>
 			</div>
+			{!chatOpen && (
+				<button
+					type="button"
+					aria-label="Open Claude (⌘L)"
+					title="Claude · ⌘L"
+					className="fixed end-4 bottom-4 z-30 grid size-10 place-content-center rounded-full bg-brand text-primary-foreground shadow-overlay hover:opacity-90"
+					onClick={() => setChatOpen(true)}
+				>
+					<MingcuteSparklesLine className="size-5" />
+				</button>
+			)}
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+				<AppearanceSection />
+				<AiSettingsSection />
 				{updateState ? (
 					<UpdatesSection
 						state={updateState}
@@ -426,6 +493,14 @@ function App() {
 				open={htmlAppsDialogOpen}
 				onOpenChange={setHtmlAppsDialogOpen}
 				workspacePath={workspacePath ?? null}
+			/>
+			<KeyboardShortcutsModal
+				open={shortcutsOpen}
+				onOpenChange={setShortcutsOpen}
+			/>
+			<QuickSwitcher
+				open={quickSwitcherOpen}
+				onOpenChange={setQuickSwitcherOpen}
 			/>
 		</main>
 	);
@@ -537,36 +612,40 @@ function MarkdownEditor({
 		};
 	});
 	return (
-		<EditorView
-			path={path}
-			initialMarkdown={initialMarkdown}
-			wikiTargets={wikiTargets}
-			extensions={[
-				createImageExtension(path),
-				createEmbedExtension({
-					workspacePath: workspace.workspacePath,
-					filePath: path,
-				}),
-			]}
-			onPaste={(editor, event) => handleImagePaste({ editor, event })}
-			onDrop={(editor, event) => handleImageDrop({ editor, event })}
-			onLocalChange={updateEditorContent}
-			onSave={savePathContent}
-			onScrollContainerChange={onScrollContainerChange}
-			onOpenExternalLink={desktopApi.openExternalUrl}
-			onOpenWikiLink={(target) =>
-				void loadPath(
-					resolveWikiPath({
-						target,
-						files: workspace.files,
+		<div className="relative flex h-full min-h-0 flex-col">
+			<EditorView
+				path={path}
+				initialMarkdown={initialMarkdown}
+				wikiTargets={wikiTargets}
+				extensions={[
+					createImageExtension(path),
+					createEmbedExtension({
 						workspacePath: workspace.workspacePath,
+						filePath: path,
 					}),
-				)
-			}
-			onMessage={(message, kind) =>
-				kind === "success" ? toast.success(message) : toast.error(message)
-			}
-		/>
+				]}
+				onPaste={(editor, event) => handleImagePaste({ editor, event })}
+				onDrop={(editor, event) => handleImageDrop({ editor, event })}
+				onLocalChange={updateEditorContent}
+				onSave={savePathContent}
+				onScrollContainerChange={onScrollContainerChange}
+				onOpenExternalLink={desktopApi.openExternalUrl}
+				onOpenWikiLink={(target) =>
+					void loadPath(
+						resolveWikiPath({
+							target,
+							files: workspace.files,
+							workspacePath: workspace.workspacePath,
+							currentPath: path,
+						}),
+					)
+				}
+				onMessage={(message, kind) =>
+					kind === "success" ? toast.success(message) : toast.error(message)
+				}
+			/>
+			<BacklinksPanel currentPath={path} />
+		</div>
 	);
 }
 

@@ -1,11 +1,11 @@
 ---
 name: write-product-spec
-description: Write a PRODUCT.md spec for a significant Hubble user-facing feature, focused only on user experience and observable behavior. Use when the user asks for a product spec, UX spec, PRD, desired behavior doc, or wants feature behavior clarified before implementation.
+description: Write a PRODUCT.md spec for a significant Sudomd user-facing feature, focused only on user experience and observable behavior. Use when the user asks for a product spec, UX spec, PRD, desired behavior doc, or wants feature behavior clarified before implementation.
 ---
 
 # write-product-spec
 
-Write a `PRODUCT.md` spec for a significant Hubble feature.
+Write a `PRODUCT.md` spec for a significant Sudomd feature.
 
 ## Overview
 
@@ -15,9 +15,8 @@ Stay out of implementation. Do not include internal types, state layout, data fl
 
 "User" means the consumer of the surface:
 
-- For app UX: the person using Hubble web or desktop.
-- For CLI surfaces: the developer invoking `hubble`.
-- For shared editor or sync behavior: the app/user-visible behavior callers can rely on, not the internals that produce it.
+- For app UX: the person using the Sudomd desktop app.
+- For shared editor behavior: the app/user-visible behavior callers can rely on, not the internals that produce it.
 
 Write specs to `specs/<id>/PRODUCT.md`, where `<id>` is one of:
 
@@ -26,22 +25,22 @@ Write specs to `specs/<id>/PRODUCT.md`, where `<id>` is one of:
 
 `specs/` should contain only id-named directories as direct children. Use the sibling `TECH.md` path for the same id when one exists.
 
-Only create a GitHub issue when the user explicitly asks. This repo uses GitHub Issues on `bholmesdev/hubble.md` via `gh`; see `docs/agents/issue-tracker.md`.
+Only create a GitHub issue when the user explicitly asks. This repo uses GitHub Issues on `ahmedrowaihi/sudomd` via `gh`; see `docs/agents/issue-tracker.md`.
 
 ## Before Writing
 
 Gather only enough context to write observable behavior:
 
 - Directory id: GitHub issue id or kebab-case feature name.
-- Target surface: `apps/desktop`, `apps/www`, CLI, editor, sync, or cross-surface.
+- Target surface: `apps/desktop`, editor, or runtime.
 - Target users and their goal.
 - Existing user journey and desired user journey.
-- Existing Hubble screens, flows, and design-system primitives that should shape the experience.
+- Existing Sudomd screens, flows, and design-system primitives that should shape the experience.
 - Key states, edge cases, and user-visible failure modes.
 
-Read `CONTEXT.md` and relevant ADRs when terminology matters. Use the project glossary: Workspace, Workspace Folder, Plain Folder, Loose File, Cloud Sync, Markdown File, Asset, Embed, Embed Bundle, Workspace Snapshot.
+Read `CONTEXT.md` and relevant ADRs when terminology matters. Use the project glossary: Workspace, Workspace Folder, Plain Folder, Loose File, Markdown File, Asset, Embed, HTML App, Workspace Snapshot.
 
-If the feature has UI or interaction design, inspect nearby Hubble screens and existing primitives before drafting Behavior. The spec should describe the intended user experience in terms of familiar app patterns and expected controls, without inventing a new visual system.
+If the feature has UI or interaction design, inspect nearby Sudomd screens and existing primitives before drafting Behavior. The spec should describe the intended user experience in terms of familiar app patterns and expected controls, without inventing a new visual system.
 
 ## Structure
 
@@ -69,10 +68,9 @@ Cover, as relevant:
 - Default behavior and happy path.
 - Every user-visible state and transition.
 - Inputs the user can provide and responses they see.
-- Existing design-system primitives the user should experience: dialogs, menus, buttons, lists, editor controls, toasts, empty states, and comparable Hubble patterns.
+- Existing design-system primitives the user should experience: dialogs, menus, buttons, lists, editor controls, toasts, empty states, and comparable Sudomd patterns.
 - Empty, loading, pending, offline, permission, error, timeout, and cancellation states.
-- Cross-surface differences between desktop and web.
-- Workspace states: Workspace Folder, Plain Folder, Loose File, local-only Workspace, synced Workspace.
+- Workspace states: Workspace Folder, Plain Folder, Loose File.
 - Races or concurrent user actions that affect what the user sees.
 - Accessibility, keyboard, focus, and reduced-motion expectations.
 - Invariants that must not regress.
@@ -94,8 +92,8 @@ When useful, include a short `## UX validation` section focused only on observab
 
 Good entries name:
 
-- the app surface to open: desktop or web
-- the Workspace state to use: Workspace Folder, Plain Folder, Loose File, local-only Workspace, or synced Workspace
+- the app surface to open: desktop
+- the Workspace state to use: Workspace Folder, Plain Folder, or Loose File
 - the exact user actions
 - the visible result, focus behavior, keyboard behavior, persistence, or error state to confirm
 

@@ -14,8 +14,10 @@ export { WorkspaceSwitcherMenu } from "./components/WorkspaceSwitcherMenu";
 export {
 	EditorView,
 	type EditorViewProps,
+	INSERT_MARKDOWN_EVENT,
 	type WikiTarget,
 } from "./editor/EditorView";
+export { COPY_FOR_BASECAMP_EVENT } from "./editor/FormatCommandMenu";
 export { FormattingStatusBar } from "./editor/FormattingStatusBar";
 export { LinkCreationGhostExtension } from "./editor/LinkCreationGhostExtension";
 export { SmartLinkExtension } from "./editor/SmartLinkExtension";

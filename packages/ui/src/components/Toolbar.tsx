@@ -11,7 +11,7 @@ import MingcuteLayoutLeftLine from "~icons/mingcute/layout-left-line";
 import { fileNameFromPath } from "../lib/filePath";
 import { Button } from "../primitives/button";
 
-const START_INSET = isMac() ? "var(--hubble-traffic-light-inset, 70px)" : "8px";
+const START_INSET = isMac() ? "var(--sudomd-traffic-light-inset, 70px)" : "8px";
 const END_INSET = isMac()
 	? "0px"
 	: "calc(100vw - env(titlebar-area-width, calc(100vw - 138px)))";
