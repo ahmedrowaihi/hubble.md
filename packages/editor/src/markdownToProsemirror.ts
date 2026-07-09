@@ -36,7 +36,7 @@ function blockToPM(node: Content): JSONContent[] {
 	switch (node.type) {
 		case "paragraph": {
 			const [maybeImage] = node.children;
-			if (maybeImage?.type === "image") {
+			if (node.children.length === 1 && maybeImage?.type === "image") {
 				return imageToPM(maybeImage);
 			}
 			const paragraphHtml = node.children.every(

@@ -34,4 +34,16 @@ describe("image markdown conversion", () => {
 		const doc = markdownToTiptapDoc("before\n\n![]()\n\nafter");
 		expect(doc.content?.some((node) => node.type === "image")).toBe(false);
 	});
+
+	it("keeps text that follows an inline image", () => {
+		const doc = markdownToTiptapDoc("![diagram](example.png) trailing");
+
+		expect(doc.content?.[0]).toMatchObject({
+			type: "paragraph",
+			content: [
+				{ type: "text", text: "diagram" },
+				{ type: "text", text: " trailing" },
+			],
+		});
+	});
 });
