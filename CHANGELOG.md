@@ -13,7 +13,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Fixed
 
-- Copying linked rich text now preserves hyperlinks when pasted into other rich text editors. [#149](https://github.com/bholmesdev/hubble.md/issues/149)
+- Copying linked rich text now preserves hyperlinks when pasted into other rich text editors. Thanks [@snvtac](https://github.com/snvtac)! [#149](https://github.com/bholmesdev/hubble.md/issues/149)
 
 ## [0.1.18] - 2026-07-07
 
