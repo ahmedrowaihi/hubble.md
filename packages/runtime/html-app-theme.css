@@ -24,28 +24,29 @@
 	--radius: 0.625rem;
 }
 
-/*
- * Dark mode. HTML apps render in a sandboxed iframe that still inherits the
- * host renderer's resolved color scheme, so a media query is the right signal
- * for system-follow — no host-to-iframe messaging needed. Palette mirrors the
- * desktop `.dark` block (warm neutrals at hue ~95, Notion-guided).
- */
+/* Dark mode. The sandboxed iframe inherits the host's resolved color scheme, so
+   prefers-color-scheme works without host-to-iframe messaging. Mirrors `.dark`. */
 @media (prefers-color-scheme: dark) {
 	:root {
-		--background: oklch(0.205 0.004 95);
-		--foreground: oklch(0.945 0.003 95);
-		--card: oklch(0.245 0.005 95);
-		--primary: color-mix(in oklab, var(--brand) 88%, white);
-		--primary-foreground: oklch(0.18 0.004 95);
-		--secondary: oklch(0.285 0.005 95);
-		--muted: oklch(0.275 0.005 95);
-		--muted-foreground: oklch(0.72 0.006 95);
-		--accent: oklch(0.29 0.006 95);
-		--selected: oklch(0.4 0.045 92);
+		--background: oklch(0.2 0.004 60);
+		--foreground: oklch(0.945 0.002 60);
+		--card: oklch(0.24 0.005 60);
+		--primary: oklch(0.47 0.08 159.6);
+		--primary-foreground: oklch(0.985 0 0);
+		--secondary: oklch(0.285 0.005 60);
+		--muted: oklch(0.275 0.005 60);
+		--muted-foreground: oklch(0.72 0.006 60);
+		--accent: oklch(0.32 0.04 88);
+		--selected: oklch(0.73 0.125 88);
+		--selected-foreground: oklch(0.24 0.03 85);
 		--destructive: oklch(0.704 0.191 22.216);
 		--border: oklch(1 0 0 / 10%);
 		--input: oklch(1 0 0 / 14%);
-		--ring: color-mix(in oklab, var(--brand) 68%, white);
+		--ring: oklch(0.75 0.13 85);
+	}
+
+	::selection {
+		background: color-mix(in oklab, #8a764b 88%, transparent);
 	}
 }
 
