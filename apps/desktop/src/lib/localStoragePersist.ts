@@ -16,9 +16,10 @@ export function localStoragePersist<T extends StateObject | StatePrimitive>(
 				const toStore = serialize ? serialize(nextState) : nextState;
 				try {
 					localStorage.setItem(key, JSON.stringify(toStore));
-				} catch {
+				} catch (error) {
 					// Persistence is best-effort; a storage quota/security error
 					// must not prevent the in-memory state update.
+					console.warn(`Failed to persist "${key}" to localStorage`, error);
 				}
 				return nextState;
 			});
