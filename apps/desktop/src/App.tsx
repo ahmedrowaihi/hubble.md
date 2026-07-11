@@ -42,6 +42,8 @@ import {
 	createWorkspaceWithSidebar,
 	forceKeepLocalEdits,
 	getPendingRenameTarget,
+	goBack,
+	goForward,
 	handleExternalFileChange,
 	loadPath,
 	openWorkspace,
@@ -58,6 +60,8 @@ import {
 	toggleTerminal,
 	updateEditorContent,
 } from "./store/actions";
+import { canGoBack, canGoForward } from "./store/history";
+import { useHistoryNav } from "./store/hooks";
 import {
 	chatCommandStore,
 	sidebarOpenStore,
@@ -102,6 +106,8 @@ function App() {
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
 	const terminalPosition = useStoreValue(terminalPositionStore);
 	const hasWorkspace = workspacePath !== null;
+	const { canGoBack: menuCanGoBack, canGoForward: menuCanGoForward } =
+		useHistoryNav();
 	const [scrollContainerEl, setScrollContainerEl] =
 		useState<HTMLDivElement | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -201,8 +207,16 @@ function App() {
 			hasMarkdownNoteOpen:
 				typeof currentPath === "string" && hasMarkdownExtension(currentPath),
 			isSourceMode: state.viewMode === "source",
+			canGoBack: menuCanGoBack,
+			canGoForward: menuCanGoForward,
 		});
-	}, [hasWorkspace, state.currentPath, state.viewMode]);
+	}, [
+		hasWorkspace,
+		menuCanGoBack,
+		menuCanGoForward,
+		state.currentPath,
+		state.viewMode,
+	]);
 
 	useEffect(() => {
 		if (!sidebarOpen) setFocusedSidebarPath(null);
@@ -210,7 +224,15 @@ function App() {
 
 	useEffect(() => {
 		const onKeyDown = async (event: KeyboardEvent) => {
-			if (keymatch(event, "CmdOrCtrl+N")) {
+			if (keymatch(event, "CmdOrCtrl+[")) {
+				if (!canGoBack()) return;
+				event.preventDefault();
+				await goBack();
+			} else if (keymatch(event, "CmdOrCtrl+]")) {
+				if (!canGoForward()) return;
+				event.preventDefault();
+				await goForward();
+			} else if (keymatch(event, "CmdOrCtrl+N")) {
 				event.preventDefault();
 				await createMarkdownFile();
 			} else if (keymatch(event, "CmdOrCtrl+,")) {
@@ -295,6 +317,8 @@ function App() {
 			),
 			desktopApi.onMenuSyncWorkspace(() => void refreshFiles()),
 			desktopApi.onMenuToggleTerminal(() => toggleTerminal()),
+			desktopApi.onMenuGoBack(() => void goBack()),
+			desktopApi.onMenuGoForward(() => void goForward()),
 			desktopApi.onMenuToggleSourceMode(() => {
 				const current = viewerStore.get();
 				if (
@@ -349,7 +373,8 @@ function App() {
 					? workspace.lastOpenedPaths[workspace.workspacePath]
 					: undefined);
 			if (lastPath) {
-				await loadPath(lastPath);
+				// Restore must stay quiet when the remembered file was deleted on disk.
+				await loadPath(lastPath, { missing: "silent" });
 			}
 		};
 		void init();

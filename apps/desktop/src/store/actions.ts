@@ -23,6 +23,17 @@ import {
 	pathAfterMove,
 	rewriteMovedLinks,
 } from "../lib/markdownLinkRewrite";
+import {
+	activeHistory,
+	canGoBack,
+	canGoForward,
+	clearHistory,
+	normalizeStack,
+	pruneHistory,
+	pushHistory,
+	rewriteHistory,
+	setHistory,
+} from "./history";
 import type { TerminalPosition } from "./persistence";
 import { DEFAULT_CHAT_COMMAND } from "./settings";
 import {
@@ -34,6 +45,7 @@ import {
 	type FileEntry,
 	type FolderEntry,
 	getBaseline,
+	historyStore,
 	isInWorkspace,
 	LOADING_DELAY_MS,
 	MAX_RECENT,
@@ -345,6 +357,11 @@ function uniqueFolderPath(parent: string): string {
 
 const pendingRenames = new Map<string, string>();
 
+type LoadPathOptions = {
+	history?: "push" | "none";
+	missing?: "toast" | "silent";
+};
+
 export function getPendingRenameTarget(path: string) {
 	return pendingRenames.get(path) ?? null;
 }
@@ -443,7 +460,7 @@ export async function openWorkspace(path?: string) {
 
 	const lastFile = workspaceStore.get().lastOpenedPaths[nextPath];
 	if (lastFile) {
-		await loadPath(lastFile);
+		await loadPath(lastFile, { missing: "silent" });
 		return;
 	}
 
@@ -595,6 +612,7 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 		const movedFiles = [{ fromPath: path, toPath: nextPath }];
 		if (movedAssetFolder) movedFiles.push(movedAssetFolder);
 		await updateMovedLinks(movedFiles, filesBeforeRename);
+		rewriteHistory(path, nextPath);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -629,7 +647,8 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 		await syncPinnedNotes();
 		await refreshFiles();
 		if (isCurrentFile) {
-			await loadPath(nextPath);
+			// Path rewrite already updated history; reload content without a new visit.
+			await loadPath(nextPath, { history: "none" });
 		}
 	} catch (err) {
 		pendingRenames.delete(path);
@@ -713,6 +732,7 @@ export async function renameFolder(
 		}
 		await desktopApi.renameFile(path, nextPath);
 		await deleteEmptySourceAncestors(path, nextPath, workspacePath);
+		rewriteHistory(path, nextPath, true);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -823,6 +843,7 @@ export async function moveSidebarItem(
 			item.kind === "file"
 				? await moveAssociatedAssetFolder(sourcePath, nextPath)
 				: null;
+		rewriteHistory(sourcePath, nextPath, isFolder);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -932,6 +953,12 @@ export async function deleteMarkdownFile(
 ) {
 	try {
 		await desktopApi.deleteFile(path);
+		const wasCurrentFile = viewerStore.get().currentPath === path;
+		if (wasCurrentFile) {
+			clearHistory();
+		} else {
+			pruneHistory(path);
+		}
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -973,6 +1000,12 @@ export async function deleteMarkdownFile(
 export async function deleteFolder(path: string) {
 	try {
 		await desktopApi.deleteFile(path, { recursive: true });
+		const currentPath = viewerStore.get().currentPath;
+		if (currentPath && pathInFolder(currentPath, path)) {
+			clearHistory();
+		} else {
+			pruneHistory(path, true);
+		}
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -1053,29 +1086,107 @@ export async function forceKeepLocalEdits() {
 	await savePathContent(current.currentPath, current.content, { force: true });
 }
 
-export const loadPath = latest(async ({ isStale }, path: string) => {
-	const timer = window.setTimeout(() => {
-		if (isStale()) return;
-		viewerStore.set((state) => ({ ...state, status: "loading", error: null }));
-	}, LOADING_DELAY_MS);
+export const loadPath = latest(
+	async ({ isStale }, path: string, options?: LoadPathOptions) => {
+		const historyMode = options?.history ?? "push";
+		const missingMode = options?.missing ?? "toast";
+		const timer = window.setTimeout(() => {
+			if (isStale()) return;
+			viewerStore.set((state) => ({
+				...state,
+				status: "loading",
+				error: null,
+			}));
+		}, LOADING_DELAY_MS);
 
+		try {
+			const content = await desktopApi.readFileText(path);
+			if (isStale()) return;
+			appStore.set((state) => withOpenedDoc(state, path, content));
+			if (historyMode === "push") pushHistory(path);
+		} catch (err) {
+			if (isStale()) return;
+			const message = handleFileError(err);
+			if (missingMode === "toast") {
+				toast.error("Failed to open file", { description: message });
+				// Stay on the current document; the toast is the only failure
+				// surface. Only undo the delayed loading flip if it fired.
+				viewerStore.set((state) =>
+					state.status === "loading"
+						? { ...state, status: state.currentPath ? "ready" : "idle" }
+						: state,
+				);
+			} else {
+				appStore.set((state) => ({
+					...state,
+					workspace: {
+						...state.workspace,
+						lastOpenedPaths: Object.fromEntries(
+							Object.entries(state.workspace.lastOpenedPaths).filter(
+								([, openedPath]) => openedPath !== path,
+							),
+						),
+					},
+					document: emptyDoc(
+						state.document.lastOpenedPath === path
+							? null
+							: state.document.lastOpenedPath,
+					),
+				}));
+			}
+		} finally {
+			window.clearTimeout(timer);
+		}
+	},
+);
+
+async function navigateHistory(delta: -1 | 1) {
+	if (!(delta < 0 ? canGoBack() : canGoForward())) return;
+
+	const current = viewerStore.get();
+	if (current.externalChange.kind === "conflict") return;
+
+	// Block concurrent history ops for the whole leave (save + load).
+	historyStore.set((state) => ({ ...state, isNavigating: true }));
 	try {
-		const content = await desktopApi.readFileText(path);
-		if (isStale()) return;
-		appStore.set((state) => withOpenedDoc(state, path, content));
-	} catch (err) {
-		if (isStale()) return;
-		const message = handleFileError(err);
-		toast.error("Failed to open file", { description: message });
-		viewerStore.set((state) => ({
-			...emptyDoc(state.lastOpenedPath),
-			status: "error",
-			error: message,
-		}));
+		if (current.currentPath) {
+			await savePathContent(current.currentPath, current.content);
+			if (viewerStore.get().externalChange.kind === "conflict") return;
+		}
+
+		let working = activeHistory();
+		let nextIndex = working.index + delta;
+		while (nextIndex >= 0 && nextIndex < working.entries.length) {
+			const target = working.entries[nextIndex];
+			if (await desktopApi.pathExists(target)) {
+				setHistory({ entries: working.entries, index: nextIndex });
+				await loadPath(target, { history: "none", missing: "silent" });
+				return;
+			}
+			const entries = working.entries.filter((entry) => entry !== target);
+			working = normalizeStack({
+				entries,
+				index: Math.min(nextIndex - (delta > 0 ? 1 : 0), entries.length - 1),
+			});
+			setHistory(working);
+			// Forward keeps nextIndex (successor shifted in); back steps left.
+			nextIndex += delta > 0 ? 0 : -1;
+		}
+		toast.error(
+			delta < 0 ? "No previous file to open" : "No next file to open",
+		);
 	} finally {
-		window.clearTimeout(timer);
+		historyStore.set((state) => ({ ...state, isNavigating: false }));
 	}
-});
+}
+
+export function goBack() {
+	return navigateHistory(-1);
+}
+
+export function goForward() {
+	return navigateHistory(1);
+}
 
 export async function togglePinnedNote(path: string) {
 	const workspacePath = workspaceStore.get().workspacePath;
