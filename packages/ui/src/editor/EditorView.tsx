@@ -142,6 +142,7 @@ export function EditorView({
 			window.clearTimeout(saveTimerRef.current);
 		}
 		saveTimerRef.current = window.setTimeout(() => {
+			saveTimerRef.current = null;
 			void onSave(savePath, latestMarkdownRef.current);
 		}, saveDebounceMs);
 	}, [onSave, saveDebounceMs]);

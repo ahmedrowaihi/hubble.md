@@ -212,6 +212,9 @@ export async function sync(
 			headers: { "Content-Type": "application/octet-stream" },
 			body: data,
 		});
+		if (!res.ok) {
+			throw new Error(`Asset upload failed: ${res.status}`);
+		}
 		const { storageId } = (await res.json()) as { storageId: string };
 		await backend.pushAsset({
 			workspaceId,
@@ -228,6 +231,9 @@ export async function sync(
 		const url = await backend.getAssetDownloadUrl(remote.storageId);
 		if (!url) return;
 		const res = await fetch(url);
+		if (!res.ok) {
+			throw new Error(`Asset download failed: ${res.status}`);
+		}
 		const buf = new Uint8Array(await res.arrayBuffer());
 		await ensureParentDir(remote.path);
 		await fs.writeBinaryFile(`${workspacePath}/${remote.path}`, buf);
