@@ -15,6 +15,7 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
+import { keymatch } from "keymatch";
 import {
 	type CSSProperties,
 	forwardRef,
@@ -649,8 +650,7 @@ export function Sidebar({
 		(event: React.KeyboardEvent) => {
 			if (
 				!isEditableEventTarget(event.target) &&
-				(event.metaKey || event.ctrlKey) &&
-				(event.key === "Backspace" || event.key === "Delete")
+				keymatch(event.nativeEvent, "CmdOrCtrl+Backspace")
 			) {
 				const focusedRow = focusedIndex === null ? null : rows[focusedIndex];
 				const focusedKey = focusedRow ? sidebarRowKey(focusedRow) : null;
