@@ -70,7 +70,7 @@ export function UpdatesSection({
 					</Button>
 				</div>
 				{state.status === "error" && state.message ? (
-					<p className="text-xs text-destructive">{state.message}</p>
+					<p className="text-xs text-muted-foreground">{state.message}</p>
 				) : null}
 				{secondaryText ? (
 					<p className="text-xs text-muted-foreground">{secondaryText}</p>

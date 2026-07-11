@@ -85,6 +85,8 @@ const appName = devAppName ?? "Hubble";
 const debugPort = process.env.HUBBLE_DESKTOP_DEBUG_PORT ?? "9222";
 const updateFeedUrl = process.env.HUBBLE_DESKTOP_UPDATE_URL;
 const supportsAutoUpdates = !isDev && process.platform === "darwin";
+const updateCheckErrorMessage =
+	"Couldn't check for updates. Try again shortly.";
 // Check every 4 hours after the initial packaged-app update check.
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
 
@@ -936,9 +938,10 @@ async function checkForUpdates() {
 	try {
 		await autoUpdater.checkForUpdates();
 	} catch (error) {
+		console.error("Auto-update check failed", error);
 		patchUpdateState({
 			status: "error",
-			message: error instanceof Error ? error.message : String(error),
+			message: updateCheckErrorMessage,
 			lastCheckedAt: Date.now(),
 		});
 	}
@@ -992,7 +995,7 @@ function configureAutoUpdates() {
 		console.error("Auto-update error", error);
 		patchUpdateState({
 			status: "error",
-			message: error.message,
+			message: updateCheckErrorMessage,
 			lastCheckedAt: Date.now(),
 		});
 	});

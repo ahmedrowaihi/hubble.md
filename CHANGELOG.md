@@ -13,6 +13,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Fixed
 
+- Update-check failures now show a concise, unobtrusive message instead of a raw error trace.
+
 ## [0.1.19] - 2026-07-11
 
 ### Added
