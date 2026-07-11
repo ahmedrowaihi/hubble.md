@@ -43,8 +43,9 @@ async function loadStoreActions(api: MockDesktopApi) {
 	});
 
 	const actions = await import("./actions");
+	const history = await import("./history");
 	const state = await import("./state");
-	return { ...actions, ...state };
+	return { ...actions, ...history, ...state };
 }
 
 describe("desktop savePathContent", () => {
@@ -1021,6 +1022,33 @@ describe("desktop loadPath", () => {
 		expect(canGoForward()).toBe(false);
 	});
 
+	it("stays on the current file when opening a missing file fails", async () => {
+		const api = createDesktopApi();
+		api.pathExists.mockResolvedValue(true);
+		api.readFileText.mockImplementation(async (path: string) => {
+			if (path === "/workspace/missing.md") {
+				throw new Error("ENOENT: no such file or directory");
+			}
+			return `content:${path}`;
+		});
+		const { canGoBack, canGoForward, goBack, loadPath, viewerStore } =
+			await loadStoreActions(api);
+
+		await loadPath("/workspace/a.md");
+		await loadPath("/workspace/b.md");
+		await loadPath("/workspace/missing.md");
+
+		expect(viewerStore.get().currentPath).toBe("/workspace/b.md");
+		expect(viewerStore.get().content).toBe("content:/workspace/b.md");
+		expect(viewerStore.get().status).toBe("ready");
+		expect(canGoBack()).toBe(true);
+		expect(canGoForward()).toBe(false);
+
+		await goBack();
+
+		expect(viewerStore.get().currentPath).toBe("/workspace/a.md");
+	});
+
 	it("truncates forward history when a new file opens after going back", async () => {
 		const api = createDesktopApi();
 		api.pathExists.mockResolvedValue(true);
@@ -1104,6 +1132,54 @@ describe("desktop loadPath", () => {
 		await goBack();
 
 		expect(viewerStore.get().currentPath).toBe("/workspace/b.md");
+	});
+
+	it("silently clears a missing restore path without toasting", async () => {
+		const api = createDesktopApi();
+		const missingPath = "/workspace/missing.md";
+		api.readFileText.mockRejectedValue(
+			new Error(`ENOENT: no such file or directory, open '${missingPath}'`),
+		);
+		const toastError = vi.fn();
+		vi.doMock("sonner", () => ({ toast: { error: toastError } }));
+		const { appStore, loadPath, viewerStore } = await loadStoreActions(api);
+
+		appStore.set((current) => ({
+			...current,
+			workspace: {
+				...current.workspace,
+				workspacePath: "/workspace",
+				lastOpenedPaths: { "/workspace": missingPath },
+			},
+			document: {
+				...current.document,
+				lastOpenedPath: missingPath,
+			},
+		}));
+
+		await loadPath(missingPath, { missing: "silent" });
+
+		expect(viewerStore.get().currentPath).toBeNull();
+		expect(viewerStore.get().status).toBe("idle");
+		expect(viewerStore.get().lastOpenedPath).toBeNull();
+		expect(appStore.get().workspace.lastOpenedPaths).toEqual({});
+		expect(toastError).not.toHaveBeenCalled();
+	});
+
+	it("does not push history when reloading a renamed current file", async () => {
+		const api = createDesktopApi();
+		api.pathExists.mockResolvedValue(true);
+		api.readFileText.mockImplementation(
+			async (path: string) => `content:${path}`,
+		);
+		const { canGoBack, loadPath, viewerStore } = await loadStoreActions(api);
+
+		await loadPath("/workspace/a.md");
+		await loadPath("/workspace/b.md");
+		await loadPath("/workspace/b-renamed.md", { history: "none" });
+
+		expect(viewerStore.get().currentPath).toBe("/workspace/b-renamed.md");
+		expect(canGoBack()).toBe(true);
 	});
 
 	it("refreshes the sidebar when a selected file no longer exists", async () => {

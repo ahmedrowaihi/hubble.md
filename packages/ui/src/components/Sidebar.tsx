@@ -1559,6 +1559,19 @@ export function SidebarFrame({
 		setSidebarWidth(nextWidth);
 	}, [widthStorageKey]);
 
+	// Publish width on the document root so the full-window toolbar (a sibling,
+	// not a descendant) can match the sidebar seam. Hoisting the variable onto a
+	// shared ancestor would mean lifting width state (resize + persistence) out
+	// of this component into a provider both app shells wire up. One sidebar
+	// mounts per window and cleanup removes the property, so the root is safe.
+	useEffect(() => {
+		const root = document.documentElement;
+		root.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+		return () => {
+			root.style.removeProperty("--sidebar-width");
+		};
+	}, [sidebarWidth]);
+
 	function setWidth(nextWidth: number) {
 		const clampedWidth = clampSidebarWidth(nextWidth);
 		sidebarWidthRef.current = clampedWidth;

@@ -38,15 +38,15 @@ const NO_CONFLICT: ExternalChange = { kind: "none" };
 
 export const MAX_RECENT = 10;
 export const LOADING_DELAY_MS = 150;
-export const MAX_NAVIGATION_HISTORY = 50;
+export const MAX_HISTORY = 50;
 
-export type NavigationHistoryStack = {
+export type HistoryStack = {
 	entries: string[];
 	index: number;
 };
 
-export type NavigationHistoryState = {
-	byWorkspace: Record<string, NavigationHistoryStack>;
+export type HistoryState = {
+	byWorkspace: Record<string, HistoryStack>;
 	isNavigating: boolean;
 };
 
@@ -154,7 +154,7 @@ export const appStore = store<DesktopState>(getInitialState(), {
 	middleware: [localStoragePersist(STORAGE_KEY, serialize)],
 });
 
-export const navigationHistoryStore = store<NavigationHistoryState>({
+export const historyStore = store<HistoryState>({
 	byWorkspace: {},
 	isNavigating: false,
 });

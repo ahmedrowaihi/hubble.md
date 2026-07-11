@@ -17,30 +17,38 @@ const END_INSET = isMac()
 	? "0px"
 	: "calc(100vw - env(titlebar-area-width, calc(100vw - 138px)))";
 const ACTIONS_BASIS = "114px";
+const DEFAULT_SIDEBAR_WIDTH = "220px";
 const NO_DRAG_STYLE = {
 	WebkitAppRegion: "no-drag",
 } as CSSProperties;
-function ToolbarActions({
-	align = "start",
+
+// Clusters shrink from ACTIONS_BASIS by default; passing `width` pins them to
+// an exact size instead (used to match the sidebar seam).
+function ToolbarCluster({
 	children,
-	sidebarOpen = false,
+	align = "start",
+	width,
+	platformInset = true,
 }: {
-	align?: "start" | "end";
 	children?: React.ReactNode;
-	sidebarOpen?: boolean;
+	align?: "start" | "end";
+	width?: string;
+	platformInset?: boolean;
 }) {
-	const basis = sidebarOpen
-		? `calc(var(--sidebar-width, ${ACTIONS_BASIS}) - 1px)`
-		: ACTIONS_BASIS;
 	return (
-		<div className="px-2" style={{ flex: `0 100 ${basis}`, ...NO_DRAG_STYLE }}>
-			<div
-				className={`flex items-center gap-1 ${
-					align === "end" ? "justify-end" : ""
-				}`}
-			>
-				{children}
-			</div>
+		<div
+			className={`flex items-center gap-1 px-2 ${align === "end" ? "justify-end" : ""}`}
+			style={{
+				...(width
+					? { flex: "0 0 auto", inlineSize: width, maxInlineSize: width }
+					: { flex: `0 100 ${ACTIONS_BASIS}` }),
+				...(align === "start"
+					? { paddingInlineStart: platformInset ? START_INSET : 0 }
+					: { paddingInlineEnd: platformInset ? END_INSET : 0 }),
+				...NO_DRAG_STYLE,
+			}}
+		>
+			{children}
 		</div>
 	);
 }
@@ -121,34 +129,37 @@ export function Toolbar({
 			{...rootProps}
 			className={`flex h-9 items-center ${borderClass} ${rootProps?.className ?? ""}`}
 		>
-			<ToolbarActions
-				align={sidebarOpen ? "end" : "start"}
-				sidebarOpen={sidebarOpen}
+			<ToolbarCluster
+				width={
+					sidebarOpen
+						? `var(--sidebar-width, ${DEFAULT_SIDEBAR_WIDTH})`
+						: undefined
+				}
+				platformInset={platformInset}
 			>
-				<div
-					className="flex items-center gap-1"
-					style={{
-						paddingInlineStart: platformInset && !sidebarOpen ? START_INSET : 0,
-					}}
-				>
-					{onToggleSidebar && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="relative"
-							onClick={onToggleSidebar}
-							aria-label="Toggle sidebar"
-							title={`Toggle sidebar (${formatShortcut("CmdOrCtrl+Shift+E")})`}
-						>
-							<MingcuteLayoutLeftLine className="size-4" />
-							{sidebarBadge ? (
-								<span className="absolute top-1 end-1 size-1.5 rounded-full bg-primary" />
-							) : null}
-						</Button>
-					)}
-					{leftSlot}
-				</div>
-			</ToolbarActions>
+				{onToggleSidebar && (
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						className="relative"
+						onClick={onToggleSidebar}
+						aria-label="Toggle sidebar"
+						title={`Toggle sidebar (${formatShortcut("CmdOrCtrl+Shift+E")})`}
+					>
+						<MingcuteLayoutLeftLine className="size-4" />
+						{sidebarBadge ? (
+							<span className="absolute top-1 end-1 size-1.5 rounded-full bg-primary" />
+						) : null}
+					</Button>
+				)}
+				{leftSlot ? (
+					sidebarOpen ? (
+						<div className="ms-auto flex items-center gap-1">{leftSlot}</div>
+					) : (
+						leftSlot
+					)
+				) : null}
+			</ToolbarCluster>
 			<div className="flex min-w-0 justify-center" style={{ flex: "1 1 auto" }}>
 				{editingTitle ? (
 					<input
@@ -180,14 +191,9 @@ export function Toolbar({
 					</button>
 				)}
 			</div>
-			<ToolbarActions>
-				<div
-					className="flex items-center justify-end"
-					style={{ paddingInlineEnd: platformInset ? END_INSET : 0 }}
-				>
-					{rightSlot}
-				</div>
-			</ToolbarActions>
+			<ToolbarCluster align="end" platformInset={platformInset}>
+				{rightSlot}
+			</ToolbarCluster>
 		</div>
 	);
 }

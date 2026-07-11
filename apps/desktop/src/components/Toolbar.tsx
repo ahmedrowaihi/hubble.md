@@ -19,8 +19,6 @@ import { copyText } from "../lib/clipboard";
 import { hasMarkdownExtension } from "../lib/filePath";
 import { revealFileLabel } from "../lib/revealFile";
 import {
-	canGoBack,
-	canGoForward,
 	goBack,
 	goForward,
 	renameCurrentMarkdownFile,
@@ -29,9 +27,9 @@ import {
 	toggleSidebar,
 	toggleTerminal,
 } from "../store/actions";
+import { useHistoryNav } from "../store/hooks";
 import {
 	currentPathStore,
-	navigationHistoryStore,
 	sidebarOpenStore,
 	viewerStore,
 	workspacePathStore,
@@ -61,7 +59,6 @@ export function Toolbar({
 	const workspacePath = useStoreValue(workspacePathStore);
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
 	const currentPath = useStoreValue(currentPathStore);
-	useStoreValue(navigationHistoryStore);
 	const isFullScreen = useIsFullScreen();
 
 	return (
@@ -101,6 +98,7 @@ export function Toolbar({
 }
 
 function NavigationControls() {
+	const { canGoBack, canGoForward } = useHistoryNav();
 	const backLabel = `Go Back (${formatShortcut("CmdOrCtrl+[")})`;
 	const forwardLabel = `Go Forward (${formatShortcut("CmdOrCtrl+]")})`;
 	return (
@@ -110,7 +108,7 @@ function NavigationControls() {
 				size="icon-sm"
 				aria-label={backLabel}
 				title={backLabel}
-				disabled={!canGoBack()}
+				disabled={!canGoBack}
 				onClick={() => void goBack()}
 			>
 				<MingcuteArrowLeftLine className="size-4" />
@@ -120,7 +118,7 @@ function NavigationControls() {
 				size="icon-sm"
 				aria-label={forwardLabel}
 				title={forwardLabel}
-				disabled={!canGoForward()}
+				disabled={!canGoForward}
 				onClick={() => void goForward()}
 			>
 				<MingcuteArrowRightLine className="size-4" />

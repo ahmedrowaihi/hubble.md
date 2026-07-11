@@ -23,6 +23,17 @@ import {
 	pathAfterMove,
 	rewriteMovedLinks,
 } from "../lib/markdownLinkRewrite";
+import {
+	activeHistory,
+	canGoBack,
+	canGoForward,
+	clearHistory,
+	normalizeStack,
+	pruneHistory,
+	pushHistory,
+	rewriteHistory,
+	setHistory,
+} from "./history";
 import type { TerminalPosition } from "./persistence";
 import { DEFAULT_CHAT_COMMAND } from "./settings";
 import {
@@ -34,12 +45,10 @@ import {
 	type FileEntry,
 	type FolderEntry,
 	getBaseline,
+	historyStore,
 	isInWorkspace,
 	LOADING_DELAY_MS,
-	MAX_NAVIGATION_HISTORY,
 	MAX_RECENT,
-	type NavigationHistoryStack,
-	navigationHistoryStore,
 	pendingTerminalCommandStore,
 	type SortMode,
 	sidebarOpenStore,
@@ -347,119 +356,11 @@ function uniqueFolderPath(parent: string): string {
 }
 
 const pendingRenames = new Map<string, string>();
-const NO_WORKSPACE_HISTORY_KEY = "__hubble_no_workspace__";
 
 type LoadPathOptions = {
 	history?: "push" | "none";
 	missing?: "toast" | "silent";
 };
-
-function currentHistoryKey() {
-	return workspaceStore.get().workspacePath ?? NO_WORKSPACE_HISTORY_KEY;
-}
-
-function normalizeHistoryStack(stack?: NavigationHistoryStack) {
-	if (!stack || stack.entries.length === 0) {
-		return { entries: [], index: -1 };
-	}
-	return {
-		entries: stack.entries,
-		index: Math.min(Math.max(stack.index, 0), stack.entries.length - 1),
-	};
-}
-
-function activeHistoryStack() {
-	return normalizeHistoryStack(
-		navigationHistoryStore.get().byWorkspace[currentHistoryKey()],
-	);
-}
-
-function setActiveHistoryStack(stack: NavigationHistoryStack) {
-	const key = currentHistoryKey();
-	navigationHistoryStore.set((state) => ({
-		...state,
-		byWorkspace: {
-			...state.byWorkspace,
-			[key]: stack,
-		},
-	}));
-}
-
-function pushHistoryPath(path: string) {
-	const stack = activeHistoryStack();
-	if (stack.entries[stack.index] === path) return;
-	const entries = [...stack.entries.slice(0, stack.index + 1), path];
-	const trimmed = entries.slice(-MAX_NAVIGATION_HISTORY);
-	setActiveHistoryStack({
-		entries: trimmed,
-		index: trimmed.length - 1,
-	});
-}
-
-function clearActiveHistoryStack() {
-	setActiveHistoryStack({ entries: [], index: -1 });
-}
-
-function updateHistoryStacks(
-	updater: (stack: NavigationHistoryStack) => NavigationHistoryStack,
-) {
-	navigationHistoryStore.set((state) => ({
-		...state,
-		byWorkspace: Object.fromEntries(
-			Object.entries(state.byWorkspace).map(([key, stack]) => [
-				key,
-				normalizeHistoryStack(updater(normalizeHistoryStack(stack))),
-			]),
-		),
-	}));
-}
-
-function rewriteHistoryPath(
-	fromPath: string,
-	toPath: string,
-	isFolder = false,
-) {
-	updateHistoryStacks((stack) => ({
-		...stack,
-		entries: stack.entries.map((entry) =>
-			isFolder
-				? replacePathPrefix(entry, fromPath, toPath)
-				: entry === fromPath
-					? toPath
-					: entry,
-		),
-	}));
-}
-
-function pruneHistoryPath(path: string, isFolder = false) {
-	updateHistoryStacks((stack) => {
-		const currentEntry = stack.entries[stack.index];
-		const entries = stack.entries.filter((entry) =>
-			isFolder ? !pathInFolder(entry, path) : entry !== path,
-		);
-		const currentIndex = currentEntry ? entries.indexOf(currentEntry) : -1;
-		return {
-			entries,
-			index:
-				currentIndex >= 0
-					? currentIndex
-					: Math.min(stack.index, entries.length - 1),
-		};
-	});
-}
-
-export function canGoBack() {
-	const history = navigationHistoryStore.get();
-	if (history.isNavigating) return false;
-	return activeHistoryStack().index > 0;
-}
-
-export function canGoForward() {
-	const history = navigationHistoryStore.get();
-	if (history.isNavigating) return false;
-	const stack = activeHistoryStack();
-	return stack.index >= 0 && stack.index < stack.entries.length - 1;
-}
 
 export function getPendingRenameTarget(path: string) {
 	return pendingRenames.get(path) ?? null;
@@ -711,7 +612,7 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 		const movedFiles = [{ fromPath: path, toPath: nextPath }];
 		if (movedAssetFolder) movedFiles.push(movedAssetFolder);
 		await updateMovedLinks(movedFiles, filesBeforeRename);
-		rewriteHistoryPath(path, nextPath);
+		rewriteHistory(path, nextPath);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -746,7 +647,8 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 		await syncPinnedNotes();
 		await refreshFiles();
 		if (isCurrentFile) {
-			await loadPath(nextPath);
+			// Path rewrite already updated history; reload content without a new visit.
+			await loadPath(nextPath, { history: "none" });
 		}
 	} catch (err) {
 		pendingRenames.delete(path);
@@ -830,7 +732,7 @@ export async function renameFolder(
 		}
 		await desktopApi.renameFile(path, nextPath);
 		await deleteEmptySourceAncestors(path, nextPath, workspacePath);
-		rewriteHistoryPath(path, nextPath, true);
+		rewriteHistory(path, nextPath, true);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -941,7 +843,7 @@ export async function moveSidebarItem(
 			item.kind === "file"
 				? await moveAssociatedAssetFolder(sourcePath, nextPath)
 				: null;
-		rewriteHistoryPath(sourcePath, nextPath, isFolder);
+		rewriteHistory(sourcePath, nextPath, isFolder);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
@@ -1053,9 +955,9 @@ export async function deleteMarkdownFile(
 		await desktopApi.deleteFile(path);
 		const wasCurrentFile = viewerStore.get().currentPath === path;
 		if (wasCurrentFile) {
-			clearActiveHistoryStack();
+			clearHistory();
 		} else {
-			pruneHistoryPath(path);
+			pruneHistory(path);
 		}
 		appStore.set((state) => ({
 			...state,
@@ -1100,9 +1002,9 @@ export async function deleteFolder(path: string) {
 		await desktopApi.deleteFile(path, { recursive: true });
 		const currentPath = viewerStore.get().currentPath;
 		if (currentPath && pathInFolder(currentPath, path)) {
-			clearActiveHistoryStack();
+			clearHistory();
 		} else {
-			pruneHistoryPath(path, true);
+			pruneHistory(path, true);
 		}
 		appStore.set((state) => ({
 			...state,
@@ -1201,17 +1103,19 @@ export const loadPath = latest(
 			const content = await desktopApi.readFileText(path);
 			if (isStale()) return;
 			appStore.set((state) => withOpenedDoc(state, path, content));
-			if (historyMode === "push") pushHistoryPath(path);
+			if (historyMode === "push") pushHistory(path);
 		} catch (err) {
 			if (isStale()) return;
 			const message = handleFileError(err);
 			if (missingMode === "toast") {
 				toast.error("Failed to open file", { description: message });
-				viewerStore.set((state) => ({
-					...emptyDoc(state.lastOpenedPath),
-					status: "error",
-					error: message,
-				}));
+				// Stay on the current document; the toast is the only failure
+				// surface. Only undo the delayed loading flip if it fired.
+				viewerStore.set((state) =>
+					state.status === "loading"
+						? { ...state, status: state.currentPath ? "ready" : "idle" }
+						: state,
+				);
 			} else {
 				appStore.set((state) => ({
 					...state,
@@ -1237,46 +1141,42 @@ export const loadPath = latest(
 );
 
 async function navigateHistory(delta: -1 | 1) {
-	if (navigationHistoryStore.get().isNavigating) return;
-	const stack = activeHistoryStack();
-	if (delta < 0 ? stack.index <= 0 : stack.index >= stack.entries.length - 1) {
-		return;
-	}
+	if (!(delta < 0 ? canGoBack() : canGoForward())) return;
 
 	const current = viewerStore.get();
 	if (current.externalChange.kind === "conflict") return;
-	if (current.currentPath) {
-		await savePathContent(current.currentPath, current.content);
-		if (viewerStore.get().externalChange.kind === "conflict") return;
-	}
 
-	navigationHistoryStore.set((state) => ({ ...state, isNavigating: true }));
+	// Block concurrent history ops for the whole leave (save + load).
+	historyStore.set((state) => ({ ...state, isNavigating: true }));
 	try {
-		let nextIndex = stack.index + delta;
-		while (nextIndex >= 0 && nextIndex < stack.entries.length) {
-			const target = stack.entries[nextIndex];
+		if (current.currentPath) {
+			await savePathContent(current.currentPath, current.content);
+			if (viewerStore.get().externalChange.kind === "conflict") return;
+		}
+
+		let working = activeHistory();
+		let nextIndex = working.index + delta;
+		while (nextIndex >= 0 && nextIndex < working.entries.length) {
+			const target = working.entries[nextIndex];
 			if (await desktopApi.pathExists(target)) {
-				setActiveHistoryStack({ entries: stack.entries, index: nextIndex });
+				setHistory({ entries: working.entries, index: nextIndex });
 				await loadPath(target, { history: "none", missing: "silent" });
 				return;
 			}
-			const nextEntries = activeHistoryStack().entries.filter(
-				(entry) => entry !== target,
-			);
-			setActiveHistoryStack({
-				entries: nextEntries,
-				index: Math.min(
-					nextIndex - (delta > 0 ? 1 : 0),
-					nextEntries.length - 1,
-				),
+			const entries = working.entries.filter((entry) => entry !== target);
+			working = normalizeStack({
+				entries,
+				index: Math.min(nextIndex - (delta > 0 ? 1 : 0), entries.length - 1),
 			});
-			nextIndex += delta;
+			setHistory(working);
+			// Forward keeps nextIndex (successor shifted in); back steps left.
+			nextIndex += delta > 0 ? 0 : -1;
 		}
 		toast.error(
 			delta < 0 ? "No previous file to open" : "No next file to open",
 		);
 	} finally {
-		navigationHistoryStore.set((state) => ({ ...state, isNavigating: false }));
+		historyStore.set((state) => ({ ...state, isNavigating: false }));
 	}
 }
 

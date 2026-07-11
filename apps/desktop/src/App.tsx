@@ -39,8 +39,6 @@ import { resolveRelativeLinkPath } from "./lib/relativeLinkPath";
 import { resolveWikiPath } from "./lib/wikiPath";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
-	canGoBack,
-	canGoForward,
 	createWorkspaceWithSidebar,
 	forceKeepLocalEdits,
 	getPendingRenameTarget,
@@ -62,9 +60,10 @@ import {
 	toggleTerminal,
 	updateEditorContent,
 } from "./store/actions";
+import { canGoBack, canGoForward } from "./store/history";
+import { useHistoryNav } from "./store/hooks";
 import {
 	chatCommandStore,
-	navigationHistoryStore,
 	sidebarOpenStore,
 	terminalPositionStore,
 	uiStore,
@@ -105,13 +104,10 @@ function App() {
 	const state = useStoreValue(viewerStore);
 	const workspacePath = useStoreValue(workspacePathStore);
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
-	const navigationHistory = useStoreValue(navigationHistoryStore);
 	const terminalPosition = useStoreValue(terminalPositionStore);
 	const hasWorkspace = workspacePath !== null;
-	const menuCanGoBack = navigationHistory.isNavigating ? false : canGoBack();
-	const menuCanGoForward = navigationHistory.isNavigating
-		? false
-		: canGoForward();
+	const { canGoBack: menuCanGoBack, canGoForward: menuCanGoForward } =
+		useHistoryNav();
 	const [scrollContainerEl, setScrollContainerEl] =
 		useState<HTMLDivElement | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -377,7 +373,8 @@ function App() {
 					? workspace.lastOpenedPaths[workspace.workspacePath]
 					: undefined);
 			if (lastPath) {
-				await loadPath(lastPath);
+				// Restore must stay quiet when the remembered file was deleted on disk.
+				await loadPath(lastPath, { missing: "silent" });
 			}
 		};
 		void init();
