@@ -123,6 +123,9 @@ jobs:
               file.write("\n".join(output) + "\n")
           PY
 
+      - name: Clear untrusted review artifact
+        run: rm -f review.json
+
       - name: Review with Grok 4.5
         uses: warpdotdev/oz-agent-action@v1
         with:
@@ -201,6 +204,7 @@ jobs:
 
           python3 - review.json raw_diff.txt payload.json <<'PY'
           import json
+          import os
           import re
           import sys
 
@@ -243,6 +247,7 @@ jobs:
                   locations[path]["LEFT"].add(old_line)
                   old_line += 1
               elif raw_line.startswith(" "):
+                  locations[path]["LEFT"].add(old_line)
                   locations[path]["RIGHT"].add(new_line)
                   old_line += 1
                   new_line += 1
@@ -295,7 +300,8 @@ jobs:
 
           payload = {
               "body": body,
-              "event": "APPROVE" if verdict == "APPROVE" else "REQUEST_CHANGES",
+              "commit_id": os.environ["EXPECTED_HEAD_SHA"],
+              "event": "REQUEST_CHANGES" if verdict == "REJECT" else "COMMENT",
               "comments": normalized,
           }
           with open(payload_path, "w", encoding="utf-8") as file:
@@ -305,20 +311,7 @@ jobs:
       - name: Publish GitHub review
         run: |
           set -euo pipefail
-          if gh api \
-            --method POST \
-            "repos/$REPO/pulls/$PR_NUMBER/reviews" \
-            --input payload.json; then
-            exit 0
-          fi
-
-          if [ "$(jq -r '.event' payload.json)" != "APPROVE" ]; then
-            exit 1
-          fi
-
-          echo "::warning::Approval failed; publishing the review as a non-blocking comment."
-          jq '.event = "COMMENT"' payload.json > comment-payload.json
           gh api \
             --method POST \
             "repos/$REPO/pulls/$PR_NUMBER/reviews" \
-            --input comment-payload.json
+            --input payload.json
