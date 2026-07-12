@@ -9,6 +9,7 @@ export type PendingSave = {
 
 type PendingSaveRef = { current: PendingSave | null };
 
+/** Cancels the timer first so cleanup and the debounce cannot save the same edit twice. */
 export function flushPendingSave(ref: PendingSaveRef) {
 	const pending = ref.current;
 	if (!pending) return;
@@ -17,7 +18,6 @@ export function flushPendingSave(ref: PendingSaveRef) {
 	void pending.save(pending.path, pending.markdown);
 }
 
-/** Keeps each delayed edit bound to the file path it was created for. */
 export function schedulePendingSave({
 	delay,
 	markdown,
