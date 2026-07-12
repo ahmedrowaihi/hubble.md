@@ -13,6 +13,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Fixed
 
+- Switching between notes now keeps navigation controls stable and saves pending edits to the correct file. [#167](https://github.com/bholmesdev/hubble.md/pull/167)
+
 ## [0.1.20] - 2026-07-12
 
 ### Added
