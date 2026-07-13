@@ -19,9 +19,9 @@ jobs:
       - name: Verify tag matches desktop version
         run: |
           VERSION="$(node -p "require('./apps/desktop/package.json').version")"
-          TAG="${GITHUB_REF_NAME#desktop-v}"
+          TAG="${GITHUB_REF_NAME#sudomd-v}"
           if [ "$VERSION" != "$TAG" ]; then
-            echo "Tag desktop-v$TAG does not match apps/desktop package version $VERSION"
+            echo "Tag sudomd-v$TAG does not match apps/desktop package version $VERSION"
             exit 1
           fi
 
@@ -29,7 +29,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#desktop-v}"
+          VERSION="${GITHUB_REF_NAME#sudomd-v}"
           awk -v ver="$VERSION" '
             $0 ~ "^## \\[" ver "\\]" { flag=1; next }
             /^## / && flag { flag=0 }
