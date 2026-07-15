@@ -9,6 +9,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- HTML Apps can use `./` and `../` paths to access Markdown files relative to the app. [#177](https://github.com/bholmesdev/hubble.md/pull/177)
+
 ### Changed
 
 - Editor blocks now use a consistent reading rhythm, with tighter list grouping and clearer heading separation. [f6c44a2](https://github.com/bholmesdev/hubble.md/commit/f6c44a2)
