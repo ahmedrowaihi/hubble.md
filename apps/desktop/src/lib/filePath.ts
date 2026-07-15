@@ -112,6 +112,7 @@ export function relativeWorkspacePath(
 	workspacePath: string | null,
 ) {
 	if (!workspacePath) return path;
+	if (path === workspacePath) return "";
 	const prefix = workspacePath.endsWith("/")
 		? workspacePath
 		: `${workspacePath}/`;
