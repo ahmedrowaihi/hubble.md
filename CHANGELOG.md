@@ -9,6 +9,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- HTML Apps can use `./` and `../` paths to access Markdown files relative to the app. [#177](https://github.com/bholmesdev/hubble.md/pull/177)
+
 ### Changed
 
 - HTML Apps can now be edited in source mode from the file menu or keyboard shortcut. [#178](https://github.com/bholmesdev/hubble.md/pull/178)

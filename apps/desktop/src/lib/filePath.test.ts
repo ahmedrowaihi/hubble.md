@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { hasDocumentExtension, isHiddenSidebarFolderName } from "./filePath";
+import {
+	dirname,
+	hasDocumentExtension,
+	isHiddenSidebarFolderName,
+	relativeWorkspacePath,
+} from "./filePath";
+
+describe("dirname", () => {
+	it("preserves Windows drive roots", () => {
+		expect(dirname("C:/index.html")).toBe("C:/");
+		expect(dirname("C:\\index.html")).toBe("C:\\");
+	});
+});
 
 describe("hasDocumentExtension", () => {
 	it("matches files with rich and source viewer modes", () => {
@@ -16,5 +28,11 @@ describe("isHiddenSidebarFolderName", () => {
 		expect(isHiddenSidebarFolderName("note.assets")).toBe(true);
 		expect(isHiddenSidebarFolderName("note.assets.backup")).toBe(false);
 		expect(isHiddenSidebarFolderName("assets")).toBe(false);
+	});
+});
+
+describe("relativeWorkspacePath", () => {
+	it("returns an empty path for the workspace root", () => {
+		expect(relativeWorkspacePath("/vault", "/vault")).toBe("");
 	});
 });

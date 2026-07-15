@@ -673,6 +673,7 @@ function HtmlDocumentViewer({
 			) : (
 				<IframeView
 					className="block min-h-0 flex-1 border-0 bg-card"
+					htmlAppPath={path}
 					onError={setError}
 					src={toAssetUrl(path)}
 					style={{ blockSize: "100%", inlineSize: "100%" }}
