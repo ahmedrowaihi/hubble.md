@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	dirname,
+	duplicateBasenames,
 	hasDocumentExtension,
 	isHiddenSidebarFolderName,
 	relativeWorkspacePath,
@@ -13,6 +14,17 @@ describe("dirname", () => {
 	});
 });
 
+describe("duplicateBasenames", () => {
+	it("finds duplicate folder names across path separators", () => {
+		expect(
+			duplicateBasenames([
+				"/projects/alpha/plans",
+				"/projects/notes",
+				"C:\\projects\\beta\\plans",
+			]),
+		).toEqual(new Set(["plans"]));
+	});
+});
 describe("hasDocumentExtension", () => {
 	it("matches files with rich and source viewer modes", () => {
 		expect(hasDocumentExtension("note.md")).toBe(true);

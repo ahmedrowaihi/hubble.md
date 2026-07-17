@@ -17,6 +17,16 @@ export function dirname(filePath: string): string | null {
 export function basename(filePath: string): string {
 	return filePath.split(/[\\/]/).pop() ?? filePath;
 }
+export function duplicateBasenames(paths: string[]): Set<string> {
+	const counts = new Map<string, number>();
+	for (const path of paths) {
+		const name = basename(path);
+		counts.set(name, (counts.get(name) ?? 0) + 1);
+	}
+	return new Set(
+		[...counts].filter(([, count]) => count > 1).map(([name]) => name),
+	);
+}
 
 export function extname(filePath: string): string {
 	const name = basename(filePath);

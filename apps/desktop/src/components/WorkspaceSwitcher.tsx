@@ -1,6 +1,7 @@
 import { formatShortcut, WorkspaceSwitcherMenu } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import MingcuteAddLine from "~icons/mingcute/add-line";
+import { basename, dirname, duplicateBasenames } from "../lib/filePath";
 import { tildePath } from "../lib/tildePath";
 import { openWorkspace, setWorkspaceSwitcherOpen } from "../store/actions";
 import {
@@ -9,17 +10,14 @@ import {
 	workspacePathStore,
 } from "../store/state";
 
-function folderName(path: string): string {
-	return path.split("/").pop() ?? path.split("\\").pop() ?? path;
-}
-
 export function WorkspaceSwitcher() {
 	const workspacePath = useStoreValue(workspacePathStore);
 	const recentWorkspaces = useStoreValue(recentWorkspacesStore);
 	const open = useStoreValue(switcherOpenStore);
 	if (!workspacePath) return null;
-	const workspaceName = folderName(workspacePath);
+	const workspaceName = basename(workspacePath);
 	const others = recentWorkspaces.filter((p) => p !== workspacePath);
+	const duplicateNames = duplicateBasenames([workspacePath, ...others]);
 
 	return (
 		<WorkspaceSwitcherMenu
@@ -31,15 +29,27 @@ export function WorkspaceSwitcher() {
 			<WorkspaceSwitcherMenu.Item selected title={tildePath(workspacePath)}>
 				<span className="truncate">{workspaceName}</span>
 			</WorkspaceSwitcherMenu.Item>
-			{others.map((path) => (
-				<WorkspaceSwitcherMenu.Item
-					key={path}
-					title={tildePath(path)}
-					onClick={() => void openWorkspace(path)}
-				>
-					<span className="truncate">{folderName(path)}</span>
-				</WorkspaceSwitcherMenu.Item>
-			))}
+			{others.map((path) => {
+				const name = basename(path);
+				const parent = dirname(path);
+				return (
+					<WorkspaceSwitcherMenu.Item
+						key={path}
+						title={tildePath(path)}
+						onClick={() => void openWorkspace(path)}
+					>
+						<span className="truncate">
+							{name}
+							{duplicateNames.has(name) && parent && (
+								<span className="text-muted-foreground">
+									{" — "}
+									{tildePath(parent)}
+								</span>
+							)}
+						</span>
+					</WorkspaceSwitcherMenu.Item>
+				);
+			})}
 			<WorkspaceSwitcherMenu.Item
 				icon={<MingcuteAddLine className="size-3 shrink-0" />}
 				onClick={() => void openWorkspace()}
