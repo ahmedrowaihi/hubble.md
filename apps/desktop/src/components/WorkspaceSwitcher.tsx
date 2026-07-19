@@ -31,22 +31,19 @@ export function WorkspaceSwitcher() {
 			</WorkspaceSwitcherMenu.Item>
 			{others.map((path) => {
 				const name = basename(path);
-				const parent = dirname(path);
+				const parent = duplicateNames.has(name) ? dirname(path) : null;
 				return (
 					<WorkspaceSwitcherMenu.Item
 						key={path}
 						title={tildePath(path)}
 						onClick={() => void openWorkspace(path)}
 					>
-						<span className="truncate">
-							{name}
-							{duplicateNames.has(name) && parent && (
-								<span className="text-muted-foreground">
-									{" — "}
-									{tildePath(parent)}
-								</span>
-							)}
-						</span>
+						<span className="min-w-0 shrink truncate">{name}</span>
+						{parent && (
+							<span className="ms-auto min-w-0 flex-1 truncate text-start text-muted-foreground [direction:rtl]">
+								<bdi dir="ltr">{tildePath(parent)}</bdi>
+							</span>
+						)}
 					</WorkspaceSwitcherMenu.Item>
 				);
 			})}
