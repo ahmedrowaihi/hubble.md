@@ -7,6 +7,7 @@ import type {
 	TelemetryChoice,
 	TelemetryConsent,
 } from "../src/desktopApi/types";
+import { singleFlight, writeQueue } from "./concurrency";
 
 export const telemetryEventNames = {
 	desktopActive: "Desktop Active",
@@ -65,9 +66,10 @@ export class TelemetryManager {
 	private readonly fetch: typeof globalThis.fetch;
 	private readonly now: () => Date;
 	private readonly newInstallationId: () => string;
-	private sendPromise: Promise<void> | null = null;
-	private persistPromise: Promise<void> = Promise.resolve();
+	private readonly enqueueWrite = writeQueue();
 	private activeRequest: AbortController | null = null;
+
+	readonly flush = singleFlight(() => this.flushPending());
 
 	constructor(private readonly options: TelemetryManagerOptions) {
 		this.fetch = options.fetch ?? globalThis.fetch;
@@ -120,17 +122,6 @@ export class TelemetryManager {
 		// the final write, so don't flush what it wiped.
 		if (this.getConsent() === "declined") return;
 		await this.flush();
-	}
-
-	async flush(): Promise<void> {
-		if (this.sendPromise) {
-			await this.sendPromise;
-			return this.flush();
-		}
-		this.sendPromise = this.flushPending().finally(() => {
-			this.sendPromise = null;
-		});
-		return this.sendPromise;
 	}
 
 	private async flushPending() {
@@ -233,17 +224,14 @@ export class TelemetryManager {
 	}
 
 	private async persist() {
+		// Capture now so later state changes don't leak into this write.
 		const content = `${JSON.stringify(this.state, null, 2)}\n`;
-		const write = this.persistPromise
-			.catch(() => {})
-			.then(async () => {
-				await fs.mkdir(path.dirname(this.options.statePath), {
-					recursive: true,
-				});
-				await fs.writeFile(this.options.statePath, content, { mode: 0o600 });
+		await this.enqueueWrite(async () => {
+			await fs.mkdir(path.dirname(this.options.statePath), {
+				recursive: true,
 			});
-		this.persistPromise = write;
-		await write;
+			await fs.writeFile(this.options.statePath, content, { mode: 0o600 });
+		});
 	}
 }
 
