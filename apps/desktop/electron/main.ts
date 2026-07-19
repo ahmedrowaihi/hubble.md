@@ -686,16 +686,21 @@ function responseForAsset(filePath: string) {
 		? injectHtmlAppRuntime(fsSync.readFileSync(filePath, "utf8"))
 		: fsSync.readFileSync(filePath);
 
+	// Scriptable documents must stay sandboxed even if another frame, like
+	// the PDF viewer, navigates to them directly. HTML matches IframeView's
+	// iframe sandbox; SVG is only ever rendered via <img> (where CSP document
+	// directives don't apply and scripts never run), so it gets no tokens.
+	const cspSandbox = isHtml
+		? "sandbox allow-scripts allow-forms"
+		: contentType === "image/svg+xml"
+			? "sandbox"
+			: null;
+
 	return new Response(body, {
 		headers: {
 			"cache-control": "no-store",
 			"content-type": contentType,
-			// Workspace HTML must stay sandboxed (matching IframeView's iframe
-			// sandbox) even if another frame, like the PDF viewer, navigates to
-			// it directly.
-			...(isHtml
-				? { "content-security-policy": "sandbox allow-scripts allow-forms" }
-				: {}),
+			...(cspSandbox ? { "content-security-policy": cspSandbox } : {}),
 		},
 	});
 }
