@@ -8,6 +8,12 @@ You hit something fuzzy and need a judgment call. Shell out to the `claude` CLI 
 
 Run from the repo root so `claude` can read files by relative path:
 
+Claude Code stores subscription OAuth credentials in macOS Keychain. Codex's
+filesystem sandbox cannot read them, so a sandboxed `claude auth status` may
+incorrectly report `loggedIn: false`. Run the `claude -p` command outside the
+sandbox, requesting approval for the reusable `claude -p` prefix. Only ask the
+user to log in if `claude auth status` also fails outside the sandbox.
+
 ```bash
 claude -p --model claude-opus-4-7 "$(cat <<'EOF'
 <your question, stated plainly>
