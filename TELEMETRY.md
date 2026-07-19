@@ -1,6 +1,6 @@
 # Hubble Telemetry
 
-Hubble collects completely anonymous telemetry data about general usage. Hubble shows a notice on first launch, and you may opt out at any time.
+Hubble collects completely anonymous telemetry data about general usage. Telemetry is on by default: Hubble shows a notice on first launch, and you may opt out there or in Settings at any time.
 
 ## Why Is Telemetry Collected?
 
@@ -8,11 +8,11 @@ Hubble is an open source project. Telemetry shows which parts of the app people 
 
 ## What Is Being Collected?
 
-At most two events are sent per day, directly to [Plausible](https://plausible.io):
+At most two events are recorded per day of use, sent directly to [Plausible](https://plausible.io). If you are offline, events wait on your device and are sent the next time the app is online.
 
-| Event | Sent when |
+| Event | Recorded when |
 | --- | --- |
-| `Desktop Active` | You used the desktop app that day |
+| `Desktop Active` | You opened the desktop app that day |
 | `HTML App Used` | You opened an HTML App that day |
 
 Every event carries the same properties:
@@ -32,6 +32,7 @@ An example event payload:
   "domain": "hubble.md",
   "name": "Desktop Active",
   "url": "https://hubble.md/telemetry/desktop",
+  "interactive": false,
   "props": {
     "installationId": "123e4567-e89b-42d3-a456-426614174000",
     "localDate": "2026-07-19",
@@ -42,23 +43,27 @@ An example event payload:
 }
 ```
 
+The `url` is a field Plausible requires to group events on its dashboard. Nothing is hosted or fetched at that address.
+
 ## What About Sensitive Data?
 
 Note contents, file names, and file paths are never collected and never leave your device.
 
-The installation ID identifies an install, not a person: it is generated randomly and nothing links it to you. Like any HTTP request, delivery exposes your IP address and user agent to [Plausible](https://plausible.io) during transport. Per Plausible's [data policy](https://plausible.io/data-policy), it records the arrival time but does not store the raw IP.
+The installation ID identifies an install, not a person: it is generated randomly and nothing links it to you. Like any HTTP request, delivery exposes your IP address and user agent to [Plausible](https://plausible.io) during transport. Plausible's [data policy](https://plausible.io/data-policy) describes how it handles that data; it does not store raw IP addresses.
 
 ## Will This Data Be Shared?
 
-Events are stored in Hubble's [Plausible](https://plausible.io) account and are used only to guide Hubble development. They stay there until Hubble deletes the site's data; if the Plausible plan is canceled, retention follows Plausible's [data policy](https://plausible.io/data-policy) for canceled plans.
+Events are stored indefinitely in Hubble's [Plausible](https://plausible.io) account and are used only to guide Hubble development. If the Plausible plan is canceled, retention follows Plausible's [data policy](https://plausible.io/data-policy) for canceled plans.
 
 ## How Do I Opt Out?
 
 Choose "Disable" on the first-launch notice, or turn off "Share usage data" at any time in Settings under "Usage statistics".
 
-Opting out aborts any in-flight request and deletes the installation ID and all queued events from your device. Opting back in generates a fresh ID.
+Because telemetry is on by default, an event may be sent before you respond to the first-launch notice. Opting out stops all future events, aborts any in-flight request, and deletes the installation ID and all pending events from your device. Opting back in generates a fresh ID.
 
 ## Implementation
 
 - [`apps/desktop/electron/telemetry.ts`](apps/desktop/electron/telemetry.ts): consent, event queue, and delivery
 - [`apps/desktop/src/components/TelemetrySection.tsx`](apps/desktop/src/components/TelemetrySection.tsx): consent UI
+
+Your consent choice, installation ID, and pending events are stored in `telemetry.json` in Hubble's app data folder, so you can inspect them yourself.
