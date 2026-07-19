@@ -7,6 +7,7 @@ import {
 	isChangelogPath,
 	prepareChangelogMarkdown,
 } from "../lib/changelogNote";
+import { latest } from "../lib/concurrency";
 import {
 	absoluteWorkspacePath,
 	basename,
@@ -24,7 +25,6 @@ import {
 	relativeWorkspacePath,
 	replacePathPrefix,
 } from "../lib/filePath";
-import { latest } from "../lib/latest";
 import {
 	indexMovedFiles,
 	type MovedFile,
