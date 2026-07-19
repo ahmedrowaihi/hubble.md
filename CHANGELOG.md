@@ -9,6 +9,14 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.21] - 2026-07-18
+
+### Added
+
 - HTML Apps can use `./` and `../` paths to access Markdown files relative to the app. [#177](https://github.com/bholmesdev/hubble.md/pull/177)
 
 ### Changed
