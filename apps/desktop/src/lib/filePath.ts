@@ -63,8 +63,21 @@ export function dirname(filePath: string): string | null {
 	return filePath.slice(0, separatorIndex);
 }
 
+/** Gets the final folder or file name from a POSIX or Windows path. */
 export function basename(filePath: string): string {
 	return filePath.split(/[\\/]/).pop() ?? filePath;
+}
+
+/** Finds folder or file names shared by more than one path. */
+export function duplicateBasenames(paths: string[]): Set<string> {
+	const counts = new Map<string, number>();
+	for (const path of paths) {
+		const name = basename(path);
+		counts.set(name, (counts.get(name) ?? 0) + 1);
+	}
+	return new Set(
+		[...counts].filter(([, count]) => count > 1).map(([name]) => name),
+	);
 }
 
 export function extname(filePath: string): string {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	dirname,
+	duplicateBasenames,
 	fileKindForPath,
 	hasDocumentExtension,
 	hasImageExtension,
@@ -16,6 +17,18 @@ describe("dirname", () => {
 	it("preserves Windows drive roots", () => {
 		expect(dirname("C:/index.html")).toBe("C:/");
 		expect(dirname("C:\\index.html")).toBe("C:\\");
+	});
+});
+
+describe("duplicateBasenames", () => {
+	it("finds duplicate folder names across path separators", () => {
+		expect(
+			duplicateBasenames([
+				"/projects/alpha/plans",
+				"/projects/notes",
+				"C:\\projects\\beta\\plans",
+			]),
+		).toEqual(new Set(["plans"]));
 	});
 });
 
